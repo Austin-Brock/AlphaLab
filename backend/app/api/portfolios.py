@@ -1,10 +1,10 @@
 import uuid
-from typing import Annotated
+from decimal import Decimal
 
-from fastapi import APIRouter, Depends, status
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, status
 
-from app.db import get_session
+from app.api.deps import MarketDataServiceDep, PortfolioServiceDep
+from app.market_data.provider import MarketDataUnavailableError
 from app.schemas import (
     CashBalanceOut,
     LedgerEntryOut,
@@ -14,32 +14,41 @@ from app.schemas import (
     PortfolioValueOut,
     PositionOut,
 )
-from app.services.portfolio import PortfolioService
+from app.services.portfolio import PortfolioService, PortfolioValuation
 
 router = APIRouter(prefix="/portfolios", tags=["portfolios"])
 
 
-def get_portfolio_service(session: Annotated[Session, Depends(get_session)]) -> PortfolioService:
-    return PortfolioService(session)
-
-
-Service = Annotated[PortfolioService, Depends(get_portfolio_service)]
+def value_portfolio(
+    portfolio_id: uuid.UUID, service: PortfolioService, market: MarketDataServiceDep
+) -> PortfolioValuation:
+    """Value positions at latest market prices, falling back to cost if unavailable."""
+    symbols = [p.symbol for p in service.get_positions(portfolio_id)]
+    prices: dict[str, Decimal] = {}
+    if symbols:
+        try:
+            prices = {p.symbol: p.price for p in market.get_latest_prices(symbols).prices}
+        except MarketDataUnavailableError:
+            pass
+    return service.calculate_portfolio_value(portfolio_id, prices)
 
 
 @router.post("", response_model=PortfolioOut, status_code=status.HTTP_201_CREATED)
-def create_portfolio(body: PortfolioCreate, service: Service):
+def create_portfolio(body: PortfolioCreate, service: PortfolioServiceDep):
     return service.create_portfolio(body.name, body.starting_capital, body.strategy_id)
 
 
 @router.get("", response_model=list[PortfolioOut])
-def list_portfolios(service: Service):
+def list_portfolios(service: PortfolioServiceDep):
     return service.list_portfolios()
 
 
 @router.get("/{portfolio_id}", response_model=PortfolioSummary)
-def get_portfolio(portfolio_id: uuid.UUID, service: Service):
+def get_portfolio(
+    portfolio_id: uuid.UUID, service: PortfolioServiceDep, market: MarketDataServiceDep
+):
     portfolio = service.get_portfolio(portfolio_id)
-    valuation = service.calculate_portfolio_value(portfolio_id)
+    valuation = value_portfolio(portfolio_id, service, market)
     return PortfolioSummary(
         **PortfolioOut.model_validate(portfolio).model_dump(),
         cash=valuation.cash,
@@ -49,20 +58,20 @@ def get_portfolio(portfolio_id: uuid.UUID, service: Service):
 
 
 @router.get("/{portfolio_id}/positions", response_model=list[PositionOut])
-def get_positions(portfolio_id: uuid.UUID, service: Service):
+def get_positions(portfolio_id: uuid.UUID, service: PortfolioServiceDep):
     return service.get_positions(portfolio_id)
 
 
 @router.get("/{portfolio_id}/cash", response_model=CashBalanceOut)
-def get_cash(portfolio_id: uuid.UUID, service: Service):
+def get_cash(portfolio_id: uuid.UUID, service: PortfolioServiceDep):
     return CashBalanceOut(portfolio_id=portfolio_id, cash=service.get_cash_balance(portfolio_id))
 
 
 @router.get("/{portfolio_id}/ledger", response_model=list[LedgerEntryOut])
-def get_ledger(portfolio_id: uuid.UUID, service: Service):
+def get_ledger(portfolio_id: uuid.UUID, service: PortfolioServiceDep):
     return service.get_ledger(portfolio_id)
 
 
 @router.get("/{portfolio_id}/value", response_model=PortfolioValueOut)
-def get_value(portfolio_id: uuid.UUID, service: Service):
-    return service.calculate_portfolio_value(portfolio_id)
+def get_value(portfolio_id: uuid.UUID, service: PortfolioServiceDep, market: MarketDataServiceDep):
+    return value_portfolio(portfolio_id, service, market)

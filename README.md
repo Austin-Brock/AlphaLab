@@ -4,7 +4,7 @@ A simulated autonomous trading bot platform.
 
 AlphaLab starts an AI-managed portfolio with **$1,000,000 in simulated cash** and lets it trade autonomously against **real market data** — researching stocks, proposing trades, managing risk, and explaining every decision — while you watch its performance on a dashboard.
 
-> **Status:** Milestone 1 (Portfolio Foundation) complete. See the full [development plan](docs/PLAN.md).
+> **Status:** Milestones 1 (Portfolio Foundation) and 2 (Market Data) complete. See the full [development plan](docs/PLAN.md).
 
 ## Getting started
 
@@ -13,6 +13,7 @@ Requires Docker and [uv](https://docs.astral.sh/uv/).
 ```bash
 docker compose up -d --wait          # Postgres (dev + test databases)
 cd backend
+cp .env.example .env                 # add your Alpaca paper-trading keys
 uv sync
 uv run alembic upgrade head          # create the schema
 uv run python -m app.seed            # create the $1M AlphaLab AI Portfolio
@@ -35,9 +36,14 @@ cd backend && uv run pytest
 | GET    | `/portfolios/{id}/positions` | Current holdings                           |
 | GET    | `/portfolios/{id}/cash`      | Cash balance (sum of ledger)               |
 | GET    | `/portfolios/{id}/ledger`    | Every cash movement                        |
-| GET    | `/portfolios/{id}/value`     | Valuation breakdown by position            |
+| GET    | `/portfolios/{id}/value`     | Valuation at latest market prices          |
+| GET    | `/market/watchlist`          | The 10 default tracked symbols             |
+| GET    | `/market/prices?symbols=`    | Latest prices (defaults to the watchlist)  |
+| GET    | `/market/bars/{symbol}`      | Historical candles (`timeframe`, `start`, `end`) |
 
 Money is returned as decimal strings, never floats.
+
+Market data is cached in Postgres. Latest prices are reused for 60 seconds. If Alpaca is unreachable, the API serves the last known data with `stale: true` and a `provider_error` message instead of failing.
 
 ## How it works
 

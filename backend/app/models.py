@@ -1,4 +1,4 @@
-"""Database models for portfolio accounting.
+"""Database models for portfolio accounting and cached market data.
 
 Engineering rule: no direct balance mutations. A portfolio has no cash column;
 cash is always the sum of its append-only `cash_ledger` entries.
@@ -10,6 +10,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import (
+    BigInteger,
     CheckConstraint,
     DateTime,
     Enum,
@@ -20,6 +21,8 @@ from sqlalchemy import (
     func,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+from app.market_data.provider import Timeframe
 
 # Money is stored with 4 decimal places; share quantities allow fractional shares.
 Money = Numeric(20, 4)
@@ -110,3 +113,40 @@ class Position(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class LatestPrice(Base):
+    """Most recent trade price fetched for a symbol; doubles as the price cache."""
+
+    __tablename__ = "latest_prices"
+
+    symbol: Mapped[str] = mapped_column(String(20), primary_key=True)
+    price: Mapped[Decimal] = mapped_column(Money)
+    # When the trade happened at the exchange.
+    price_time: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    # When AlphaLab last fetched it from the provider.
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    source: Mapped[str] = mapped_column(String(50))
+
+
+class PriceBar(Base):
+    """A historical OHLCV candle (split-adjusted).
+
+    On the free IEX feed, volume covers IEX trades only, a small slice of total market volume.
+    """
+
+    __tablename__ = "price_bars"
+
+    symbol: Mapped[str] = mapped_column(String(20), primary_key=True)
+    timeframe: Mapped[Timeframe] = mapped_column(
+        Enum(Timeframe, name="bar_timeframe", values_callable=lambda e: [m.value for m in e]),
+        primary_key=True,
+    )
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    open: Mapped[Decimal] = mapped_column(Money)
+    high: Mapped[Decimal] = mapped_column(Money)
+    low: Mapped[Decimal] = mapped_column(Money)
+    close: Mapped[Decimal] = mapped_column(Money)
+    volume: Mapped[int] = mapped_column(BigInteger)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    source: Mapped[str] = mapped_column(String(50))
