@@ -1,4 +1,8 @@
-"""Alpaca Market Data API v2 client (https://docs.alpaca.markets/reference/stocklatesttrades)."""
+"""Alpaca API client for market data and the market clock.
+
+Only read-only endpoints are used. AlphaLab never places orders with Alpaca;
+all trading is simulated locally.
+"""
 
 import re
 import time
@@ -9,7 +13,13 @@ from typing import Any
 
 import httpx2
 
-from app.market_data.provider import Bar, MarketDataUnavailableError, Quote, Timeframe
+from app.market_data.provider import (
+    Bar,
+    MarketClock,
+    MarketDataUnavailableError,
+    Quote,
+    Timeframe,
+)
 
 RETRYABLE_STATUS = {429, 500, 502, 503, 504}
 
@@ -20,6 +30,7 @@ class AlpacaMarketDataProvider:
         api_key: str,
         secret_key: str,
         base_url: str = "https://data.alpaca.markets",
+        trading_url: str = "https://paper-api.alpaca.markets",
         feed: str = "iex",
         max_attempts: int = 3,
         client: httpx2.Client | None = None,
@@ -31,6 +42,7 @@ class AlpacaMarketDataProvider:
         self.sleep = sleep
         self.client = client or httpx2.Client(timeout=10.0)
         self.base_url = base_url.rstrip("/")
+        self.trading_url = trading_url.rstrip("/")
         self.headers = {"APCA-API-KEY-ID": api_key, "APCA-API-SECRET-KEY": secret_key}
 
     def get_latest_quotes(self, symbols: Sequence[str]) -> dict[str, Quote]:
@@ -77,14 +89,23 @@ class AlpacaMarketDataProvider:
                 return bars
             params["page_token"] = data["next_page_token"]
 
-    def _get(self, path: str, params: dict[str, Any]) -> dict[str, Any]:
+    def get_market_clock(self) -> MarketClock:
+        data = self._get("/v2/clock", {}, base_url=self.trading_url)
+        return MarketClock(
+            is_open=bool(data["is_open"]),
+            next_open=_parse_time(data["next_open"]),
+            next_close=_parse_time(data["next_close"]),
+        )
+
+    def _get(
+        self, path: str, params: dict[str, Any], base_url: str | None = None
+    ) -> dict[str, Any]:
         """GET with retries on rate limits, server errors, and network failures."""
+        url = (base_url or self.base_url) + path
         last_error = ""
         for attempt in range(1, self.max_attempts + 1):
             try:
-                response = self.client.get(
-                    self.base_url + path, params=params, headers=self.headers
-                )
+                response = self.client.get(url, params=params, headers=self.headers)
             except httpx2.TransportError as exc:
                 last_error = f"network error: {exc}"
             else:

@@ -7,12 +7,14 @@ Its only job is keeping accurate financial records.
 import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models import CashLedgerEntry, LedgerEntryType, Portfolio, Position
+
+MONEY_PLACES = Decimal("0.0001")
 
 
 class PortfolioNotFoundError(Exception):
@@ -32,7 +34,7 @@ class PositionValuation:
 
     @property
     def market_value(self) -> Decimal:
-        return self.quantity * self.price
+        return (self.quantity * self.price).quantize(MONEY_PLACES, rounding=ROUND_HALF_UP)
 
 
 @dataclass(frozen=True)
@@ -54,12 +56,25 @@ class PortfolioService:
     def __init__(self, session: Session):
         self.session = session
 
-    def create_portfolio(self, name: str, starting_capital: Decimal, strategy_id: str) -> Portfolio:
+    def create_portfolio(
+        self,
+        name: str,
+        starting_capital: Decimal,
+        strategy_id: str,
+        max_position_pct: Decimal = Decimal("0.10"),
+        min_cash_pct: Decimal = Decimal("0.05"),
+    ) -> Portfolio:
         """Create a portfolio funded by a single opening DEPOSIT ledger entry."""
         if starting_capital <= 0:
             raise ValueError("starting_capital must be positive")
 
-        portfolio = Portfolio(name=name, starting_capital=starting_capital, strategy_id=strategy_id)
+        portfolio = Portfolio(
+            name=name,
+            starting_capital=starting_capital,
+            strategy_id=strategy_id,
+            max_position_pct=max_position_pct,
+            min_cash_pct=min_cash_pct,
+        )
         self.session.add(portfolio)
         self.session.flush()
         self.session.add(

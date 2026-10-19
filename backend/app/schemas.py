@@ -7,13 +7,15 @@ from decimal import Decimal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.market_data.provider import Timeframe
-from app.models import LedgerEntryType, PortfolioStatus
+from app.models import LedgerEntryType, OrderSide, OrderStatus, PortfolioStatus
 
 
 class PortfolioCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     starting_capital: Decimal = Field(gt=0, max_digits=20, decimal_places=4)
     strategy_id: str = Field(min_length=1, max_length=100)
+    max_position_pct: Decimal = Field(default=Decimal("0.10"), gt=0, le=1, decimal_places=4)
+    min_cash_pct: Decimal = Field(default=Decimal("0.05"), ge=0, lt=1, decimal_places=4)
 
 
 class PortfolioOut(BaseModel):
@@ -24,6 +26,8 @@ class PortfolioOut(BaseModel):
     starting_capital: Decimal
     strategy_id: str
     status: PortfolioStatus
+    max_position_pct: Decimal
+    min_cash_pct: Decimal
     created_at: datetime
 
 
@@ -116,3 +120,53 @@ class BarSeriesOut(BaseModel):
     bars: list[BarOut]
     stale: bool
     provider_error: str | None
+
+
+class OrderCreate(BaseModel):
+    symbol: str = Field(pattern=r"^[A-Za-z][A-Za-z.]{0,9}$")
+    side: OrderSide
+    # Whole shares only in V1.
+    quantity: int = Field(gt=0, le=1_000_000)
+    # Optional; resubmitting the same id returns the original order instead of trading twice.
+    client_order_id: str | None = Field(default=None, min_length=1, max_length=100)
+
+
+class RiskCheckOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    check_name: str
+    passed: bool
+    message: str
+
+
+class ExecutionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    order_id: uuid.UUID
+    symbol: str
+    side: OrderSide
+    quantity: Decimal
+    price: Decimal
+    market_price: Decimal
+    gross_amount: Decimal
+    commission: Decimal
+    executed_at: datetime
+
+
+class OrderOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    portfolio_id: uuid.UUID
+    client_order_id: str
+    symbol: str
+    side: OrderSide
+    quantity: Decimal
+    status: OrderStatus
+    source: str
+    reference_price: Decimal | None
+    rejection_reason: str | None
+    created_at: datetime
+    risk_checks: list[RiskCheckOut]
+    execution: ExecutionOut | None

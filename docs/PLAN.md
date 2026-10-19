@@ -199,6 +199,8 @@ When multiple simulations arrive, a `simulations` table can reference portfolios
 
 ### Milestone 3 — Trading Engine
 
+**Risk policy (decided):** max 10% of the portfolio in one stock, min 5% cash, orders that break a limit are rejected (never resized), market hours enforced.
+
 - Submit buy/sell orders.
 - Validate available cash.
 - Enforce risk constraints.
@@ -292,11 +294,11 @@ If the AI sells AAPL, we should be able to inspect exactly what information it h
 
 Items to resolve before or during the relevant milestone:
 
-- **Positions vs. Rule 3.** If balances derive from the ledger, `positions` should likewise be a projection of `executions` (rebuildable), not an independently mutated source of truth.
-- **Money types.** Use `NUMERIC`/`Decimal` everywhere for cash and prices — never floats.
+- ~~**Positions vs. Rule 3.**~~ `positions` is updated only by the execution engine, and a test verifies it always equals a replay of `executions`.
+- ~~**Money types.**~~ `NUMERIC`/`Decimal` everywhere, including parsing Alpaca's JSON.
 - **Corporate actions.** Stock splits and dividends will silently corrupt positions and P&L unless handled (Milestone 3). Cached bars are split-adjusted as of when they were fetched, so after a split the `price_bars` cache for that symbol must be refetched.
-- **Execution realism.** Define the simulated fill model: price source (last trade vs. bid/ask), slippage, and commissions.
-- **Market calendar.** Trading only during market hours requires an exchange calendar (holidays, half-days) and a consistent timezone (store UTC).
+- ~~**Execution realism.**~~ Decided in Milestone 3: fill at the latest trade price ± 5 bps slippage, $0 commission (both configurable).
+- ~~**Market calendar.**~~ Milestone 3 uses Alpaca's market clock (handles holidays and half-days) and fails closed if it can't be reached. All timestamps are stored in UTC.
 - **Alpaca data tier.** The free tier provides IEX-only real-time data; confirm that's acceptable or budget for SIP.
 - **Scheduler weight.** For a single daily evaluation, APScheduler inside the app may be simpler than Celery + Redis; revisit if job volume grows.
-- **Idempotency.** Agent runs and order submission need idempotency keys so a retried job can't double-trade.
+- **Idempotency.** Orders are idempotent per `client_order_id` and each order can fill at most once (Milestone 3). Agent runs still need the same protection in Milestone 4.

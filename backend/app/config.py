@@ -1,3 +1,4 @@
+from decimal import Decimal
 from functools import lru_cache
 from typing import Annotated
 
@@ -16,6 +17,8 @@ class Settings(BaseSettings):
     alpaca_api_key: SecretStr | None = None
     alpaca_secret_key: SecretStr | None = None
     alpaca_data_url: str = "https://data.alpaca.markets"
+    # Used only for the market clock (open/closed); no orders are ever sent to Alpaca.
+    alpaca_trading_url: str = "https://paper-api.alpaca.markets"
     # "iex" is free; "sip" (all US exchanges) requires a paid subscription.
     alpaca_feed: str = "iex"
 
@@ -23,6 +26,16 @@ class Settings(BaseSettings):
     watchlist: Annotated[list[str], NoDecode] = DEFAULT_WATCHLIST
     # How long a fetched latest price is served from cache before refetching.
     price_cache_ttl_seconds: int = 60
+
+    # Trading engine.
+    # Reject orders while the US market is closed. Set false to test trades after hours.
+    enforce_market_hours: bool = True
+    # Reject orders when the price was fetched longer ago than this.
+    max_price_age_seconds: int = 300
+    # Simulated slippage: buys fill this many basis points above market, sells below.
+    slippage_bps: Decimal = Decimal("5")
+    # Flat commission charged per filled order.
+    commission_per_order: Decimal = Decimal("0")
 
     @field_validator("watchlist", mode="before")
     @classmethod

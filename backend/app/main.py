@@ -1,12 +1,13 @@
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
-from app.api import market, portfolios
+from app.api import market, orders, portfolios
 from app.market_data.provider import MarketDataUnavailableError
 from app.services.portfolio import PortfolioNotFoundError
 
 app = FastAPI(title="AlphaLab", version="0.1.0")
 app.include_router(portfolios.router)
+app.include_router(orders.router)
 app.include_router(market.router)
 
 
