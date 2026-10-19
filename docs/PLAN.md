@@ -1,0 +1,302 @@
+# AlphaLab — Development Plan
+
+Build one autonomous AI trading bot first, but design the underlying architecture so AlphaLab can eventually support multiple portfolios, strategies, and simulations without a rewrite.
+
+The key distinction is **building for extensibility** vs. **building features we don't need yet**. We don't need a multi-strategy platform today — we just need to avoid architectural decisions that would prevent one later.
+
+---
+
+## 1. Version 1: One AI Trading Bot, $1 Million
+
+The application starts with $1,000,000 in simulated cash and autonomously manages a portfolio using real market data.
+
+The AI will:
+
+1. Research stocks using market data.
+2. Decide which securities to purchase.
+3. Submit simulated trades.
+4. Monitor existing positions.
+5. Decide whether to buy, sell, or hold.
+6. Track portfolio performance.
+7. Explain its investment decisions.
+
+A dashboard shows its performance over time.
+
+### V1 scope
+
+| Feature                | V1          |
+| ---------------------- | ----------- |
+| Starting capital       | $1,000,000  |
+| Portfolios             | 1           |
+| AI trading strategies  | 1           |
+| Market data            | Real prices |
+| Simulated trades       | Yes         |
+| Autonomous trading     | Yes         |
+| Portfolio dashboard    | Yes         |
+| Risk management        | Yes         |
+| Trading history        | Yes         |
+| AI decision history    | Yes         |
+| Multiple simulations   | Later       |
+| Strategy comparisons   | Later       |
+| Historical backtesting | Later       |
+
+---
+
+## 2. Architecture Decisions for Future Expansion
+
+### Decision 1: Give the portfolio a unique ID
+
+Even with only one portfolio, never hardcode it. Create a portfolio record:
+
+```python
+portfolio = {
+    "id": "portfolio-001",
+    "name": "AlphaLab AI Portfolio",
+    "starting_capital": "1000000.00",
+    "strategy_id": "ai-trading-v1",
+    "status": "ACTIVE",
+}
+```
+
+Every trade, position, and AI decision references this portfolio. Adding another portfolio later is then straightforward — no database restructuring.
+
+### Decision 2: Separate the strategy from the trading engine
+
+The AI is **not** the trading engine. The AI is a *strategy* that produces trade proposals; the trading engine handles execution.
+
+```python
+from abc import ABC, abstractmethod
+
+
+class TradingStrategy(ABC):
+    @abstractmethod
+    async def generate_proposals(self, portfolio, market_data):
+        ...
+
+
+class AITradingStrategy(TradingStrategy):
+    async def generate_proposals(self, portfolio, market_data):
+        # Research securities using an LLM
+        # Analyze existing positions
+        # Return proposed trades
+        ...
+```
+
+Later strategies (`MomentumStrategy`, `MeanReversionStrategy`, `BuyAndHoldStrategy`, …) return the same standardized trade-proposal format, so new strategies never require changes to the execution engine.
+
+### Decision 3: Make portfolio accounting independent of AI
+
+The portfolio service has no knowledge of AWS Bedrock, Strands Agents, or LLMs. Its only job is maintaining accurate financial records.
+
+```python
+class PortfolioService:
+    def get_portfolio(self, portfolio_id): ...
+    def get_positions(self, portfolio_id): ...
+    def get_cash_balance(self, portfolio_id): ...
+    def calculate_portfolio_value(self, portfolio_id): ...
+```
+
+This lets any future strategy reuse the portfolio infrastructure.
+
+---
+
+## 3. V1 Architecture
+
+```
+                   React Dashboard
+                          |
+                          v
+                       FastAPI
+                          |
+          +---------------+---------------+
+          |               |               |
+          v               v               v
+      Portfolio        Trading         Analytics
+       Service         Service          Service
+          |               |               |
+          +---------------+---------------+
+                          |
+                      PostgreSQL
+
+                  Celery Scheduler
+                          |
+                          v
+                     AI Strategy  <-->  AWS Bedrock
+                          |
+                          v
+                    Trade Proposal
+                          |
+                          v
+                     Risk Engine
+                          |
+                          v
+                  Execution Engine
+                          |
+                          v
+                    Portfolio DB
+```
+
+---
+
+## 4. Database Design (V1)
+
+| Table                 | Purpose                                      |
+| --------------------- | -------------------------------------------- |
+| `portfolios`          | Portfolio configuration and starting capital |
+| `positions`           | Current holdings                             |
+| `orders`              | Simulated buy/sell orders                    |
+| `executions`          | Completed simulated trades                   |
+| `cash_ledger`         | Financial transactions                       |
+| `agent_runs`          | AI execution history                         |
+| `agent_decisions`     | AI recommendations and reasoning             |
+| `portfolio_snapshots` | Historical portfolio performance             |
+
+Every table storing portfolio-specific data includes a `portfolio_id`.
+
+### Not building yet
+
+- A `simulations` table
+- A strategy management interface
+- A multi-portfolio dashboard
+- A strategy comparison engine
+- A strategy marketplace
+- A complex orchestration system
+
+When multiple simulations arrive, a `simulations` table can reference portfolios and strategy configurations.
+
+---
+
+## 5. Implementation Roadmap
+
+| # | Milestone              | Deliverable                                          |
+| - | ---------------------- | ---------------------------------------------------- |
+| 1 | Portfolio Foundation   | $1M simulated portfolio with accurate accounting     |
+| 2 | Market Data            | Live price updates and historical price retrieval    |
+| 3 | Trading Engine         | Simulated orders, risk checks, execution history     |
+| 4 | AI Trading             | Autonomous trade proposals using AWS Bedrock         |
+| 5 | Dashboard & Automation | Scheduled trading and portfolio monitoring           |
+
+### Milestone 1 — Portfolio Foundation
+
+- Create a portfolio with $1,000,000.
+- Store its starting capital.
+- Track cash balances.
+- Track positions.
+- Record financial transactions.
+- Calculate portfolio value.
+
+**Done when:** the API returns a portfolio containing $1,000,000 in cash and zero holdings.
+
+### Milestone 2 — Market Data
+
+- Retrieve current stock prices.
+- Retrieve historical candles.
+- Track when market data was last updated.
+- Handle API failures.
+- Cache market data.
+
+**Done when:** prices for 10 selected securities can be retrieved and displayed.
+
+### Milestone 3 — Trading Engine
+
+- Submit buy/sell orders.
+- Validate available cash.
+- Enforce risk constraints.
+- Calculate simulated execution prices.
+- Update positions.
+- Record executions.
+- Prevent duplicate fills.
+
+**Done when:** you can manually buy 100 shares of a stock and verify the resulting cash balance and position quantity.
+
+### Milestone 4 — AI Trading Agent
+
+Introduce AWS Bedrock and Strands Agents.
+
+- Give the AI access to portfolio information.
+- Give it access to market data.
+- Allow it to research stocks.
+- Generate structured trade proposals.
+- Validate proposals through the risk engine.
+- Record explanations for every decision.
+
+**Done when:** the AI independently proposes a trade that the backend validates and executes in the simulator.
+
+### Milestone 5 — Dashboard & Automation
+
+- Display portfolio value.
+- Display current positions.
+- Display trade history.
+- Display AI decisions.
+- Schedule daily trading evaluations.
+- Allow trading to be paused and resumed.
+
+**Done when:** the application runs autonomously during market hours while its decisions are monitored through the dashboard.
+
+---
+
+## 6. How AlphaLab Evolves
+
+| Version                         | New capabilities                                         |
+| ------------------------------- | -------------------------------------------------------- |
+| V1 — AI Trading Bot             | One AI strategy managing $1M                             |
+| V1.1 — Configurable Capital     | Create fresh portfolios with different starting balances |
+| V2 — Multiple Simulations       | Run independent portfolios simultaneously                |
+| V2.1 — Multiple Strategies      | AI, momentum, mean reversion, buy-and-hold               |
+| V2.2 — Strategy Comparison      | Compare performance, risk, and trading behavior          |
+| V3 — Historical Backtesting     | Replay strategies against historical market conditions   |
+
+V1 code should already have reusable strategy, portfolio, risk, and execution interfaces; future features are implemented only when needed.
+
+---
+
+## 7. Reproducible Trading Decisions
+
+Even in V1, record enough to reconstruct *why* the AI made each decision. For every AI evaluation, store:
+
+- Portfolio holdings at decision time
+- Available cash
+- Market data snapshot
+- AI model identifier
+- Prompt version
+- Research inputs
+- Trade proposals
+- Risk validation results
+- Final execution outcome
+
+If the AI sells AAPL, we should be able to inspect exactly what information it had at the time. This also makes later strategy comparisons far more meaningful, and demonstrates auditability and operational resilience.
+
+---
+
+## 8. Stack
+
+| Layer           | Choice                                      |
+| --------------- | ------------------------------------------- |
+| Backend         | Python, FastAPI, SQLAlchemy, PostgreSQL     |
+| AI              | AWS Bedrock + Strands Agents                |
+| Market data     | Alpaca                                      |
+| Frontend        | React + TypeScript                          |
+| Background jobs | Celery + Redis                              |
+| Deployment      | Docker Compose (initially)                  |
+
+## 9. Engineering Rules
+
+1. **No hardcoded portfolio IDs.** Every portfolio operation accepts an ID.
+2. **No AI-controlled execution.** The AI proposes; the risk and execution engines decide.
+3. **No direct balance mutations.** Portfolio balances derive from recorded financial transactions.
+4. **No strategy-specific trading logic.** Strategies generate proposals through a shared interface.
+
+---
+
+## 10. Open Questions / Review Notes
+
+Items to resolve before or during the relevant milestone:
+
+- **Positions vs. Rule 3.** If balances derive from the ledger, `positions` should likewise be a projection of `executions` (rebuildable), not an independently mutated source of truth.
+- **Money types.** Use `NUMERIC`/`Decimal` everywhere for cash and prices — never floats.
+- **Corporate actions.** Stock splits and dividends will silently corrupt positions and P&L unless handled (Milestone 2/3).
+- **Execution realism.** Define the simulated fill model: price source (last trade vs. bid/ask), slippage, and commissions.
+- **Market calendar.** Trading only during market hours requires an exchange calendar (holidays, half-days) and a consistent timezone (store UTC).
+- **Alpaca data tier.** The free tier provides IEX-only real-time data; confirm that's acceptable or budget for SIP.
+- **Scheduler weight.** For a single daily evaluation, APScheduler inside the app may be simpler than Celery + Redis; revisit if job volume grows.
+- **Idempotency.** Agent runs and order submission need idempotency keys so a retried job can't double-trade.
