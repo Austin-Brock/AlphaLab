@@ -1,5 +1,6 @@
 import os
 from collections.abc import Iterator
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -9,8 +10,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session
 
+from app.api.deps import get_market_data_provider
+from app.config import DEFAULT_WATCHLIST
 from app.db import get_session
 from app.main import app
+from tests.fakes import FakeMarketDataProvider
 
 TEST_DATABASE_URL = os.environ.get(
     "ALPHALAB_TEST_DATABASE_URL",
@@ -44,8 +48,18 @@ def session(engine: Engine) -> Iterator[Session]:
 
 
 @pytest.fixture
-def client(session: Session) -> Iterator[TestClient]:
+def fake_market() -> FakeMarketDataProvider:
+    """Prices for the whole default watchlist: $100, $101, ..."""
+    return FakeMarketDataProvider(
+        {symbol: Decimal(100 + i) for i, symbol in enumerate(DEFAULT_WATCHLIST)}
+    )
+
+
+@pytest.fixture
+def client(session: Session, fake_market: FakeMarketDataProvider) -> Iterator[TestClient]:
     app.dependency_overrides[get_session] = lambda: session
+    # Always override so tests never call the real Alpaca API, even with keys configured.
+    app.dependency_overrides[get_market_data_provider] = lambda: fake_market
     with TestClient(app) as client:
         yield client
     app.dependency_overrides.clear()

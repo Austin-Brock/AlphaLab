@@ -294,7 +294,7 @@ Items to resolve before or during the relevant milestone:
 
 - **Positions vs. Rule 3.** If balances derive from the ledger, `positions` should likewise be a projection of `executions` (rebuildable), not an independently mutated source of truth.
 - **Money types.** Use `NUMERIC`/`Decimal` everywhere for cash and prices — never floats.
-- **Corporate actions.** Stock splits and dividends will silently corrupt positions and P&L unless handled (Milestone 2/3).
+- **Corporate actions.** Stock splits and dividends will silently corrupt positions and P&L unless handled (Milestone 3). Cached bars are split-adjusted as of when they were fetched, so after a split the `price_bars` cache for that symbol must be refetched.
 - **Execution realism.** Define the simulated fill model: price source (last trade vs. bid/ask), slippage, and commissions.
 - **Market calendar.** Trading only during market hours requires an exchange calendar (holidays, half-days) and a consistent timezone (store UTC).
 - **Alpaca data tier.** The free tier provides IEX-only real-time data; confirm that's acceptable or budget for SIP.

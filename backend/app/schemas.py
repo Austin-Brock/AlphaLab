@@ -6,6 +6,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.market_data.provider import Timeframe
 from app.models import LedgerEntryType, PortfolioStatus
 
 
@@ -75,3 +76,43 @@ class PortfolioValueOut(BaseModel):
     positions_value: Decimal
     total_value: Decimal
     positions: list[PositionValuationOut]
+
+
+class PriceSnapshotOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    symbol: str
+    price: Decimal
+    price_time: datetime
+    fetched_at: datetime
+    source: str
+    stale: bool
+
+
+class LatestPricesOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    prices: list[PriceSnapshotOut]
+    missing: list[str]
+    provider_error: str | None
+
+
+class BarOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    timestamp: datetime
+    open: Decimal
+    high: Decimal
+    low: Decimal
+    close: Decimal
+    volume: int
+
+
+class BarSeriesOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    symbol: str
+    timeframe: Timeframe
+    bars: list[BarOut]
+    stale: bool
+    provider_error: str | None
