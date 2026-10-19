@@ -1,0 +1,33 @@
+[project]
+name = "alphalab"
+version = "0.1.0"
+description = "Simulated autonomous trading bot platform"
+requires-python = ">=3.11"
+dependencies = [
+    "alembic>=1.20",
+    "fastapi>=0.149",
+    "psycopg[binary]>=3.3",
+    "pydantic-settings>=2.16",
+    "sqlalchemy>=2.1",
+    "uvicorn[standard]>=0.30",
+]
+
+[dependency-groups]
+dev = [
+    "httpx2>=2.14",
+    "pytest>=8.3",
+    "ruff>=0.6",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.isort]
+known-third-party = ["alembic"]
