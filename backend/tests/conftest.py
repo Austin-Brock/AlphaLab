@@ -10,10 +10,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_market_data_provider
+from app.api.deps import get_execution_settings, get_market_data_provider
 from app.config import DEFAULT_WATCHLIST
 from app.db import get_session
 from app.main import app
+from app.trading.service import ExecutionSettings
 from tests.fakes import FakeMarketDataProvider
 
 TEST_DATABASE_URL = os.environ.get(
@@ -60,6 +61,8 @@ def client(session: Session, fake_market: FakeMarketDataProvider) -> Iterator[Te
     app.dependency_overrides[get_session] = lambda: session
     # Always override so tests never call the real Alpaca API, even with keys configured.
     app.dependency_overrides[get_market_data_provider] = lambda: fake_market
+    # Default trading settings, regardless of what the local .env sets.
+    app.dependency_overrides[get_execution_settings] = ExecutionSettings
     with TestClient(app) as client:
         yield client
     app.dependency_overrides.clear()

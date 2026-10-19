@@ -40,6 +40,13 @@ class Bar:
     volume: int
 
 
+@dataclass(frozen=True)
+class MarketClock:
+    is_open: bool
+    next_open: datetime
+    next_close: datetime
+
+
 class MarketDataUnavailableError(Exception):
     """The provider could not be reached or returned an error."""
 
@@ -55,4 +62,8 @@ class MarketDataProvider(Protocol):
         self, symbol: str, timeframe: Timeframe, start: datetime, end: datetime
     ) -> list[Bar]:
         """Historical candles in [start, end], oldest first."""
+        ...
+
+    def get_market_clock(self) -> MarketClock:
+        """Whether the US stock market is open now (accounts for holidays and half-days)."""
         ...

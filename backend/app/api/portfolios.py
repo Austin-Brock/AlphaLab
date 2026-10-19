@@ -35,7 +35,13 @@ def value_portfolio(
 
 @router.post("", response_model=PortfolioOut, status_code=status.HTTP_201_CREATED)
 def create_portfolio(body: PortfolioCreate, service: PortfolioServiceDep):
-    return service.create_portfolio(body.name, body.starting_capital, body.strategy_id)
+    return service.create_portfolio(
+        body.name,
+        body.starting_capital,
+        body.strategy_id,
+        max_position_pct=body.max_position_pct,
+        min_cash_pct=body.min_cash_pct,
+    )
 
 
 @router.get("", response_model=list[PortfolioOut])

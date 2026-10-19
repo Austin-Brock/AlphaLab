@@ -2,7 +2,13 @@ from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
-from app.market_data.provider import Bar, MarketDataUnavailableError, Quote, Timeframe
+from app.market_data.provider import (
+    Bar,
+    MarketClock,
+    MarketDataUnavailableError,
+    Quote,
+    Timeframe,
+)
 
 TRADE_TIME = datetime(2026, 10, 16, 19, 59, 59, tzinfo=UTC)
 
@@ -15,6 +21,7 @@ class FakeMarketDataProvider:
     def __init__(self, prices: dict[str, Decimal] | None = None):
         self.prices = prices or {}
         self.fail = False
+        self.market_open = True
         self.quote_calls: list[list[str]] = []
         self.bar_calls = 0
 
@@ -42,6 +49,15 @@ class FakeMarketDataProvider:
             bars.append(Bar(symbol, timeframe, day, price, price + 1, price - 1, price, 1_000_000))
             day += timedelta(days=1)
         return bars
+
+    def get_market_clock(self) -> MarketClock:
+        if self.fail:
+            raise MarketDataUnavailableError("fake outage")
+        return MarketClock(
+            is_open=self.market_open,
+            next_open=datetime(2026, 10, 20, 13, 30, tzinfo=UTC),
+            next_close=datetime(2026, 10, 19, 20, 0, tzinfo=UTC),
+        )
 
 
 class Clock:

@@ -15,6 +15,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from app.market_data.provider import (
+    MarketClock,
     MarketDataProvider,
     MarketDataUnavailableError,
     Timeframe,
@@ -178,6 +179,9 @@ class MarketDataService:
             stale=provider_error is not None,
             provider_error=provider_error,
         )
+
+    def get_market_clock(self) -> MarketClock:
+        return self._provider().get_market_clock()
 
     def _load_latest(self, symbols: Sequence[str]) -> dict[str, LatestPrice]:
         # populate_existing refreshes rows already in the session after an upsert.

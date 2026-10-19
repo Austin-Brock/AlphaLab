@@ -105,3 +105,22 @@ def test_error_messages_are_short_and_readable():
     json_error = httpx2.Response(422, json={"message": "invalid symbol"})
     with pytest.raises(MarketDataUnavailableError, match=r"HTTP 422: invalid symbol\)"):
         make_provider(lambda _: json_error).get_latest_quotes(["AAPL"])
+
+
+def test_market_clock_uses_trading_api():
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        assert request.url.host == "paper-api.alpaca.markets"
+        assert request.url.path == "/v2/clock"
+        return httpx2.Response(
+            200,
+            json={
+                "timestamp": "2026-10-19T18:30:00.123456789-04:00",
+                "is_open": False,
+                "next_open": "2026-10-20T09:30:00-04:00",
+                "next_close": "2026-10-20T16:00:00-04:00",
+            },
+        )
+
+    clock = make_provider(handler).get_market_clock()
+    assert clock.is_open is False
+    assert clock.next_open == datetime(2026, 10, 20, 13, 30, tzinfo=UTC)
