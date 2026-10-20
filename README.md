@@ -4,6 +4,8 @@ A simulated autonomous trading bot platform.
 
 AlphaLab starts an AI-managed portfolio with **$1,000,000 in simulated cash** and lets it trade autonomously against **real market data** — researching stocks, proposing trades, managing risk, and explaining every decision — while you watch its performance on a dashboard.
 
+**Live:** https://alphalab-austin.vercel.app (read-only for visitors)
+
 > **Status:** Milestones 1–4 complete (Portfolio Foundation, Market Data, Trading Engine, AI Trading Agent). Milestone 5 in progress: the dashboard and pause/resume are built; scheduling is next. See the full [development plan](docs/PLAN.md).
 
 ## Getting started
