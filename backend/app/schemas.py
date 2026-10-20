@@ -31,6 +31,19 @@ class PortfolioOut(BaseModel):
     created_at: datetime
 
 
+class StatusChangeRequest(BaseModel):
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class StatusChangeOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    from_status: PortfolioStatus
+    to_status: PortfolioStatus
+    reason: str | None
+    created_at: datetime
+
+
 class PortfolioSummary(PortfolioOut):
     cash: Decimal
     positions_value: Decimal

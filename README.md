@@ -4,7 +4,7 @@ A simulated autonomous trading bot platform.
 
 AlphaLab starts an AI-managed portfolio with **$1,000,000 in simulated cash** and lets it trade autonomously against **real market data** — researching stocks, proposing trades, managing risk, and explaining every decision — while you watch its performance on a dashboard.
 
-> **Status:** Milestones 1–4 complete (Portfolio Foundation, Market Data, Trading Engine, AI Trading Agent). Milestone 5 in progress: the dashboard is built; scheduling and pause/resume are next. See the full [development plan](docs/PLAN.md).
+> **Status:** Milestones 1–4 complete (Portfolio Foundation, Market Data, Trading Engine, AI Trading Agent). Milestone 5 in progress: the dashboard and pause/resume are built; scheduling is next. See the full [development plan](docs/PLAN.md).
 
 ## Getting started
 
@@ -37,7 +37,11 @@ cd frontend && npm test && npm run build
 
 ### Dashboard
 
-A read-only view of each portfolio: value and total return against starting capital, allocation, positions with unrealized P&L, every AI run (summary, each proposal's rationale and what the risk engine did with it, and the full transcript of what the AI saw and called), and the trade history with each order's risk checks. It refreshes every 30 seconds. The dashboard never places orders or starts AI runs.
+A read-only view of each portfolio: value and total return against starting capital, allocation, positions with unrealized P&L, every AI run (summary, each proposal's rationale and what the risk engine did with it, and the full transcript of what the AI saw and called), and the trade history with each order's risk checks. It refreshes every 30 seconds. The dashboard never places orders or starts AI runs; its only control is the pause/resume switch.
+
+### Pause and resume
+
+Pausing a portfolio is the trading brake. While paused, the risk engine rejects every order (`portfolio_active` check) and agent runs are skipped without calling the model. Pausing takes the same row lock as order submission, so an order either completes before the pause or is rejected after it — including orders from an AI run that was already in progress. Every pause and resume is recorded with its time and optional reason. Closed portfolios can't be paused or resumed.
 
 ### API
 
@@ -50,6 +54,9 @@ A read-only view of each portfolio: value and total return against starting capi
 | GET    | `/portfolios/{id}/cash`      | Cash balance (sum of ledger)               |
 | GET    | `/portfolios/{id}/ledger`    | Every cash movement                        |
 | GET    | `/portfolios/{id}/value`     | Valuation at latest market prices          |
+| POST   | `/portfolios/{id}/pause`     | Stop all trading (optional `reason`)       |
+| POST   | `/portfolios/{id}/resume`    | Resume trading                             |
+| GET    | `/portfolios/{id}/status-changes` | Every pause and resume, newest first  |
 | POST   | `/portfolios/{id}/orders`    | Submit an order (risk-checked, then filled) |
 | GET    | `/portfolios/{id}/orders`    | Order history with risk check results      |
 | GET    | `/portfolios/{id}/executions`| Every simulated fill                       |

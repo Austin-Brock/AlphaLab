@@ -111,6 +111,13 @@ export interface AgentRun extends AgentRunSummary {
   transcript: TranscriptMessage[] | null;
 }
 
+export interface StatusChange {
+  from_status: Portfolio["status"];
+  to_status: Portfolio["status"];
+  reason: string | null;
+  created_at: string;
+}
+
 export interface MarketClock {
   is_open: boolean;
   next_open: string;
@@ -126,9 +133,9 @@ export class ApiError extends Error {
   }
 }
 
-// The dashboard only reads. It never places orders or starts agent runs.
-async function get<T>(path: string): Promise<T> {
-  const response = await fetch(`/api${path}`);
+// The dashboard never places orders or starts agent runs. Its only write is pause/resume.
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`/api${path}`, init);
   if (!response.ok) {
     let detail = response.statusText;
     try {
@@ -141,6 +148,14 @@ async function get<T>(path: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+const get = <T>(path: string) => request<T>(path);
+const post = <T>(path: string, body: unknown) =>
+  request<T>(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
 export const api = {
   portfolios: () => get<Portfolio[]>("/portfolios"),
   value: (id: string) => get<PortfolioValue>(`/portfolios/${id}/value`),
@@ -148,4 +163,7 @@ export const api = {
   agentRuns: (id: string) => get<AgentRunSummary[]>(`/portfolios/${id}/agent-runs`),
   agentRun: (id: string, runId: string) => get<AgentRun>(`/portfolios/${id}/agent-runs/${runId}`),
   clock: () => get<MarketClock>("/market/clock"),
+  statusChanges: (id: string) => get<StatusChange[]>(`/portfolios/${id}/status-changes`),
+  pause: (id: string, reason?: string) => post<Portfolio>(`/portfolios/${id}/pause`, { reason: reason || null }),
+  resume: (id: string) => post<Portfolio>(`/portfolios/${id}/resume`, {}),
 };

@@ -33,6 +33,7 @@ export function Header({ portfolios, selected, onSelect, clock, updatedAt, loadi
             {portfolios.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
+                {p.status !== "ACTIVE" ? ` (${p.status.toLowerCase()})` : ""}
               </option>
             ))}
           </select>

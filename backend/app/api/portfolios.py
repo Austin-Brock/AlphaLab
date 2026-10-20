@@ -13,6 +13,8 @@ from app.schemas import (
     PortfolioSummary,
     PortfolioValueOut,
     PositionOut,
+    StatusChangeOut,
+    StatusChangeRequest,
 )
 from app.services.portfolio import PortfolioService, PortfolioValuation
 
@@ -81,3 +83,23 @@ def get_ledger(portfolio_id: uuid.UUID, service: PortfolioServiceDep):
 @router.get("/{portfolio_id}/value", response_model=PortfolioValueOut)
 def get_value(portfolio_id: uuid.UUID, service: PortfolioServiceDep, market: MarketDataServiceDep):
     return value_portfolio(portfolio_id, service, market)
+
+
+@router.post("/{portfolio_id}/pause", response_model=PortfolioOut)
+def pause_portfolio(
+    portfolio_id: uuid.UUID, service: PortfolioServiceDep, body: StatusChangeRequest | None = None
+):
+    """Stop all trading. Every order is rejected and agent runs are skipped until resumed."""
+    return service.pause(portfolio_id, body.reason if body else None)
+
+
+@router.post("/{portfolio_id}/resume", response_model=PortfolioOut)
+def resume_portfolio(
+    portfolio_id: uuid.UUID, service: PortfolioServiceDep, body: StatusChangeRequest | None = None
+):
+    return service.resume(portfolio_id, body.reason if body else None)
+
+
+@router.get("/{portfolio_id}/status-changes", response_model=list[StatusChangeOut])
+def get_status_changes(portfolio_id: uuid.UUID, service: PortfolioServiceDep):
+    return service.get_status_changes(portfolio_id)

@@ -314,3 +314,22 @@ class AgentDecision(Base):
     order_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("orders.id"))
 
     order: Mapped["Order | None"] = relationship(lazy="selectin")
+
+
+class PortfolioStatusChange(Base):
+    """One pause, resume, or close of a portfolio: when, from what, to what, and why."""
+
+    __tablename__ = "portfolio_status_changes"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    portfolio_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("portfolios.id"), index=True)
+    from_status: Mapped[PortfolioStatus] = mapped_column(
+        Enum(PortfolioStatus, name="portfolio_status")
+    )
+    to_status: Mapped[PortfolioStatus] = mapped_column(
+        Enum(PortfolioStatus, name="portfolio_status")
+    )
+    reason: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.clock_timestamp()
+    )
