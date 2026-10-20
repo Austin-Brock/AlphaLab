@@ -8,6 +8,20 @@ from app.market_data.provider import MarketDataUnavailableError
 from app.services.portfolio import PortfolioClosedError, PortfolioNotFoundError
 
 app = FastAPI(title="AlphaLab", version="0.1.0")
+
+# On Vercel the API is served under /api and receives that prefix; the local Vite
+# dev server strips it before proxying. Strip it here too so routes work in both.
+API_PREFIX = "/api"
+
+
+@app.middleware("http")
+async def strip_api_prefix(request: Request, call_next):
+    path = request.scope["path"]
+    if path == API_PREFIX or path.startswith(API_PREFIX + "/"):
+        request.scope["path"] = path.removeprefix(API_PREFIX) or "/"
+    return await call_next(request)
+
+
 app.include_router(portfolios.router)
 app.include_router(orders.router)
 app.include_router(agent.router)
