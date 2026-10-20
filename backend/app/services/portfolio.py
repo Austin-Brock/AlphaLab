@@ -12,7 +12,14 @@ from decimal import ROUND_HALF_UP, Decimal
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models import CashLedgerEntry, LedgerEntryType, Portfolio, Position
+from app.models import (
+    CashLedgerEntry,
+    LedgerEntryType,
+    Portfolio,
+    PortfolioStatus,
+    PortfolioStatusChange,
+    Position,
+)
 
 MONEY_PLACES = Decimal("0.0001")
 
@@ -20,6 +27,12 @@ MONEY_PLACES = Decimal("0.0001")
 class PortfolioNotFoundError(Exception):
     def __init__(self, portfolio_id: uuid.UUID):
         super().__init__(f"Portfolio {portfolio_id} not found")
+        self.portfolio_id = portfolio_id
+
+
+class PortfolioClosedError(Exception):
+    def __init__(self, portfolio_id: uuid.UUID):
+        super().__init__(f"Portfolio {portfolio_id} is closed")
         self.portfolio_id = portfolio_id
 
 
@@ -96,6 +109,49 @@ class PortfolioService:
         portfolio = self.session.get(Portfolio, portfolio_id)
         if portfolio is None:
             raise PortfolioNotFoundError(portfolio_id)
+        return portfolio
+
+    def pause(self, portfolio_id: uuid.UUID, reason: str | None = None) -> Portfolio:
+        """Stop all trading: the risk engine rejects every order and agent runs are skipped."""
+        return self._set_status(portfolio_id, PortfolioStatus.PAUSED, reason)
+
+    def resume(self, portfolio_id: uuid.UUID, reason: str | None = None) -> Portfolio:
+        return self._set_status(portfolio_id, PortfolioStatus.ACTIVE, reason)
+
+    def get_status_changes(self, portfolio_id: uuid.UUID) -> list[PortfolioStatusChange]:
+        self.get_portfolio(portfolio_id)
+        return list(
+            self.session.scalars(
+                select(PortfolioStatusChange)
+                .where(PortfolioStatusChange.portfolio_id == portfolio_id)
+                .order_by(PortfolioStatusChange.created_at.desc())
+            )
+        )
+
+    def _set_status(
+        self, portfolio_id: uuid.UUID, status: PortfolioStatus, reason: str | None
+    ) -> Portfolio:
+        # Same row lock as order submission, so a pause can't interleave with a fill:
+        # an order either completes before the pause or is rejected after it.
+        portfolio = self.session.scalar(
+            select(Portfolio).where(Portfolio.id == portfolio_id).with_for_update()
+        )
+        if portfolio is None:
+            raise PortfolioNotFoundError(portfolio_id)
+        if portfolio.status is PortfolioStatus.CLOSED:
+            self.session.rollback()
+            raise PortfolioClosedError(portfolio_id)
+        if portfolio.status is not status:
+            self.session.add(
+                PortfolioStatusChange(
+                    portfolio_id=portfolio_id,
+                    from_status=portfolio.status,
+                    to_status=status,
+                    reason=reason,
+                )
+            )
+            portfolio.status = status
+        self.session.commit()
         return portfolio
 
     def get_positions(self, portfolio_id: uuid.UUID) -> list[Position]:

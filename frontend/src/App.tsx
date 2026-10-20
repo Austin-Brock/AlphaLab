@@ -6,6 +6,7 @@ import { Header } from "./components/Header";
 import { Orders } from "./components/Orders";
 import { Overview } from "./components/Overview";
 import { Positions } from "./components/Positions";
+import { TradingControl } from "./components/TradingControl";
 import { useDashboard } from "./useDashboard";
 
 function portfolioFromHash(): string | undefined {
@@ -17,11 +18,14 @@ export function App() {
   const [loadError, setLoadError] = useState<string>();
   const [selectedId, setSelectedId] = useState(portfolioFromHash);
 
-  useEffect(() => {
+  const loadPortfolios = () =>
     api
       .portfolios()
       .then(setPortfolios)
       .catch((e: Error) => setLoadError(e.message));
+
+  useEffect(() => {
+    void loadPortfolios();
     const onHash = () => setSelectedId(portfolioFromHash());
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
@@ -67,6 +71,14 @@ export function App() {
         onRefresh={() => void dashboard.refresh()}
       />
       <main className="page">
+        <TradingControl
+          portfolio={portfolio}
+          lastChange={dashboard.statusChanges.data?.[0]}
+          onChanged={() => {
+            void loadPortfolios();
+            void dashboard.refresh();
+          }}
+        />
         <Overview portfolio={portfolio} value={dashboard.value} />
         <Positions value={dashboard.value} />
         <AgentRuns portfolioId={portfolio.id} runs={dashboard.runs} />

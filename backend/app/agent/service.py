@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.llm.client import LLMUnavailableError
 from app.market_data.provider import MarketDataUnavailableError, Timeframe
-from app.models import AgentDecision, AgentRun, AgentRunStatus, OrderSide
+from app.models import AgentDecision, AgentRun, AgentRunStatus, OrderSide, PortfolioStatus
 from app.services.market_data import MarketDataService
 from app.services.portfolio import PortfolioService
 from app.strategies.base import (
@@ -139,6 +139,13 @@ class AgentRunService:
         self.session.add(run)
         self.session.commit()
 
+        if portfolio.status is not PortfolioStatus.ACTIVE:
+            # Paused or closed: the risk engine would reject every order anyway.
+            return self._finish(
+                run,
+                AgentRunStatus.SKIPPED,
+                summary=f"Portfolio is {portfolio.status.value.lower()}",
+            )
         if self.require_market_open and snapshot.market_open is not True:
             # Don't pay for a model run whose orders would all be rejected.
             reason = (
