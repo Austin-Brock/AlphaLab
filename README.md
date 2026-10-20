@@ -4,18 +4,71 @@ A simulated autonomous trading bot platform.
 
 AlphaLab starts an AI-managed portfolio with **$1,000,000 in simulated cash** and lets it trade autonomously against **real market data** — researching stocks, proposing trades, managing risk, and explaining every decision — while you watch its performance on a dashboard.
 
-**Live:** https://alphalab-austin.vercel.app (read-only for visitors)
+**Live:** https://alphalab-austin.vercel.app
 
 > **Status:** Milestones 1–4 complete (Portfolio Foundation, Market Data, Trading Engine, AI Trading Agent). Milestone 5 in progress: the dashboard and pause/resume are built; scheduling is next. See the full [development plan](docs/PLAN.md).
 
-## Getting started
+## The dashboard
 
-Requires Docker, [uv](https://docs.astral.sh/uv/), and Node.js 20+ (for the dashboard).
+Anyone can view the live dashboard. It shows, for each portfolio:
+
+- **Value and total return** against the starting capital, and how the money is allocated
+- **Positions** with unrealized gains and losses
+- **AI decisions:** every run's summary, each proposed trade with the AI's reasoning and what the risk engine did with it, and the full record of what the AI looked at
+- **Trade history,** including every risk check on every order
+
+The site is read-only for visitors. Only the owner can change anything — placing orders, running the AI, or pausing trading.
+
+## How it works
+
+```
+AI Strategy (AWS Bedrock) → Trade Proposals → Risk Engine → Execution Engine → Portfolio Ledger
+```
+
+The AI **proposes**; the risk and execution engines **decide**. Portfolio accounting knows nothing about AI, so any future strategy (momentum, mean reversion, buy-and-hold) plugs into the same pipeline.
+
+### The AI
+
+Each run, the model reviews the portfolio and the watchlist with four tools — see the portfolio, get latest prices, get price history, and propose a trade. It must look at a stock's price history before it can propose trading it, and it can make at most 5 proposals per run. Proposals are never executed by the AI: each one becomes an ordinary order that goes through the risk engine.
+
+Every run is stored in full: the portfolio snapshot the AI saw, the model and prompt version, the complete conversation including every tool call, and each proposal linked to the order it became.
+
+### Risk checks
+
+Every order passes through the risk engine before anything moves. Orders that break a limit are **rejected, never resized**, and every check result is stored with the order.
+
+| Check | Rule |
+| --- | --- |
+| Portfolio active | Portfolio isn't paused or closed |
+| Market open | US market is open (holidays included) |
+| Price available | A fresh price exists for the symbol |
+| No short selling | Can only sell shares held |
+| Sufficient cash | Order cost ≤ available cash |
+| Cash reserve | ≥ 5% of the portfolio stays in cash |
+| Position concentration | No single stock > 10% of the portfolio |
+
+Approved orders fill at the latest market price plus 0.05% slippage (buys pay more, sells receive less), with no commission. A submitted order can never fill twice.
+
+### Pause and resume
+
+Pausing a portfolio is the trading brake: every order is rejected and AI runs are skipped until it's resumed, including orders from an AI run already in progress. Every pause and resume is recorded with its time and reason.
+
+## Stack
+
+- **Backend:** Python, FastAPI, SQLAlchemy, PostgreSQL
+- **AI:** AWS Bedrock (currently `openai.gpt-oss-120b`; any tool-using Bedrock model works)
+- **Market data:** Alpaca
+- **Frontend:** React + TypeScript
+- **Hosting:** Vercel, with Neon Postgres
+
+## Running it locally
+
+Requires Docker, [uv](https://docs.astral.sh/uv/), and Node.js 20+.
 
 ```bash
 docker compose up -d --wait          # Postgres (dev + test databases)
 cd backend
-cp .env.example .env                 # add Alpaca paper-trading keys and an admin key
+cp .env.example .env                 # then fill in your own values
 uv sync
 uv run alembic upgrade head          # create the schema
 uv run python -m app.seed            # create the $1M AlphaLab AI Portfolio
@@ -33,97 +86,11 @@ npm run dev                          # http://localhost:5173
 Run the tests:
 
 ```bash
-cd backend && uv run pytest          # against the alphalab_test database
+cd backend && uv run pytest
 cd frontend && npm test && npm run build
 ```
 
-### Dashboard
-
-A read-only view of each portfolio: value and total return against starting capital, allocation, positions with unrealized P&L, every AI run (summary, each proposal's rationale and what the risk engine did with it, and the full transcript of what the AI saw and called), and the trade history with each order's risk checks. It refreshes every 30 seconds. The dashboard never places orders or starts AI runs; its only control is the pause/resume switch, shown only to the owner.
-
-### Access
-
-AlphaLab is built to be shared publicly while only its owner can change anything:
-
-- **Reads are public.** Anyone can view portfolios, trades, AI runs and transcripts.
-- **Every change needs the admin key** (`ALPHALAB_ADMIN_KEY`, at least 32 characters; `openssl rand -hex 32`), sent as `Authorization: Bearer <key>`. This is enforced for every non-read request across the whole API, so new endpoints are protected by default. With no key configured, all changes are refused.
-- **Owner sign-in:** the dashboard's "Owner sign-in" checks the key with the server and remembers it in that browser only. Visitors never see the pause/resume control.
-- **Visitors can't run up costs:** price lookups are limited to the watchlist for visitors, and price-history ranges are capped per timeframe for everyone.
-
-### Pause and resume
-
-Pausing a portfolio is the trading brake. While paused, the risk engine rejects every order (`portfolio_active` check) and agent runs are skipped without calling the model. Pausing takes the same row lock as order submission, so an order either completes before the pause or is rejected after it — including orders from an AI run that was already in progress. Every pause and resume is recorded with its time and optional reason. Closed portfolios can't be paused or resumed.
-
-### API
-
-| Method | Path                         | Returns                                    |
-| ------ | ---------------------------- | ------------------------------------------ |
-| POST   | `/portfolios`                | Create a portfolio funded by a deposit     |
-| GET    | `/portfolios`                | All portfolios                             |
-| GET    | `/portfolios/{id}`           | Portfolio with cash, positions, total value |
-| GET    | `/portfolios/{id}/positions` | Current holdings                           |
-| GET    | `/portfolios/{id}/cash`      | Cash balance (sum of ledger)               |
-| GET    | `/portfolios/{id}/ledger`    | Every cash movement                        |
-| GET    | `/portfolios/{id}/value`     | Valuation at latest market prices          |
-| POST   | `/portfolios/{id}/pause`     | Stop all trading (optional `reason`)       |
-| POST   | `/portfolios/{id}/resume`    | Resume trading                             |
-| GET    | `/portfolios/{id}/status-changes` | Every pause and resume, newest first  |
-| POST   | `/portfolios/{id}/orders`    | Submit an order (risk-checked, then filled) |
-| GET    | `/portfolios/{id}/orders`    | Order history with risk check results      |
-| GET    | `/portfolios/{id}/executions`| Every simulated fill                       |
-| POST   | `/portfolios/{id}/agent-runs`| Run the AI strategy now (proposals → risk engine → fills) |
-| GET    | `/portfolios/{id}/agent-runs`| AI run history with decisions              |
-| GET    | `/portfolios/{id}/agent-runs/{run}` | One run, incl. input snapshot and full transcript |
-| GET    | `/market/watchlist`          | The 10 default tracked symbols             |
-| GET    | `/market/clock`              | Whether the US market is open, next open/close |
-| GET    | `/admin/check`               | 204 if the request carries the admin key   |
-| GET    | `/market/prices?symbols=`    | Latest prices (defaults to the watchlist)  |
-| GET    | `/market/bars/{symbol}`      | Historical candles (`timeframe`, `start`, `end`) |
-
-Money is returned as decimal strings, never floats. Every `POST` requires the admin key (see [Access](#access)).
-
-### Trading
-
-Every order passes through the risk engine before anything moves. Orders that break a limit are **rejected, never resized**, and every check result is stored with the order.
-
-| Check | Rule |
-| --- | --- |
-| Portfolio active | Portfolio isn't paused or closed |
-| Market open | US market is open (Alpaca clock; holidays included). Disable with `ALPHALAB_ENFORCE_MARKET_HOURS=false` for after-hours testing |
-| Price available | A fresh, non-stale price exists for the symbol |
-| No short selling | Can only sell shares held |
-| Sufficient cash | Order cost ≤ available cash |
-| Cash reserve | ≥ 5% of the portfolio stays in cash |
-| Position concentration | No single stock > 10% of the portfolio |
-
-Approved orders fill immediately at the latest market price plus 0.05% slippage (buys pay more, sells receive less), with $0 commission. The fill, its ledger entry, and the position update are written in one transaction. Resubmitting an order with the same `client_order_id` returns the original instead of trading twice.
-
-### AI agent
-
-A portfolio with `strategy_id: "ai-trading-v1"` can run the AI strategy. The model gets four tools — `get_portfolio`, `get_latest_prices`, `get_price_history`, and `propose_trade` — limited to the watchlist and at most 5 proposals per run. `propose_trade` refuses a symbol until the model has pulled its price history, so every trade is backed by research. It only records a proposal; after the model finishes, each proposal becomes an ordinary order through the risk engine (sells first). The AI never executes anything itself.
-
-Every run stores what's needed to reconstruct the decision: the portfolio snapshot it saw (holdings, cash, prices, limits), model ID, prompt version, the full conversation including every tool call and result, each proposal with its rationale linked to the resulting order, and token usage. When market hours are enforced and the market is closed, runs are skipped without calling the model.
-
-AWS access uses a dedicated `alphalab` profile with a permission set that can only invoke the allowed models; the app refuses to start a run under any other role.
-
-Market data is cached in Postgres. Latest prices are reused for 60 seconds. If Alpaca is unreachable, the API serves the last known data with `stale: true` and a `provider_error` message instead of failing.
-
-## How it works
-
-```
-Agent run → AI Strategy (AWS Bedrock) → Trade Proposals → Risk Engine → Execution Engine → Portfolio Ledger
-```
-
-The AI **proposes**; the risk and execution engines **decide**. Portfolio accounting knows nothing about AI, so any future strategy (momentum, mean reversion, buy-and-hold) plugs into the same pipeline.
-
-## Stack
-
-- **Backend:** Python, FastAPI, SQLAlchemy, PostgreSQL
-- **AI:** AWS Bedrock Converse API (currently `openai.gpt-oss-120b`; any tool-using Bedrock model works)
-- **Market data:** Alpaca
-- **Frontend:** React + TypeScript
-- **Background jobs:** Celery + Redis
-- **Deployment:** Docker Compose
+The API's interactive docs at `/docs` list every endpoint. Money is returned as decimal strings, never floats.
 
 ## Roadmap
 
