@@ -4,11 +4,11 @@ A simulated autonomous trading bot platform.
 
 AlphaLab starts an AI-managed portfolio with **$1,000,000 in simulated cash** and lets it trade autonomously against **real market data** — researching stocks, proposing trades, managing risk, and explaining every decision — while you watch its performance on a dashboard.
 
-> **Status:** Milestones 1–4 complete (Portfolio Foundation, Market Data, Trading Engine, AI Trading Agent). See the full [development plan](docs/PLAN.md).
+> **Status:** Milestones 1–4 complete (Portfolio Foundation, Market Data, Trading Engine, AI Trading Agent). Milestone 5 in progress: the dashboard is built; scheduling and pause/resume are next. See the full [development plan](docs/PLAN.md).
 
 ## Getting started
 
-Requires Docker and [uv](https://docs.astral.sh/uv/).
+Requires Docker, [uv](https://docs.astral.sh/uv/), and Node.js 20+ (for the dashboard).
 
 ```bash
 docker compose up -d --wait          # Postgres (dev + test databases)
@@ -20,11 +20,24 @@ uv run python -m app.seed            # create the $1M AlphaLab AI Portfolio
 uv run uvicorn app.main:app --reload # API at http://localhost:8000, docs at /docs
 ```
 
-Run the tests (against the `alphalab_test` database):
+Start the dashboard (with the API running):
 
 ```bash
-cd backend && uv run pytest
+cd frontend
+npm install
+npm run dev                          # http://localhost:5173
 ```
+
+Run the tests:
+
+```bash
+cd backend && uv run pytest          # against the alphalab_test database
+cd frontend && npm test && npm run build
+```
+
+### Dashboard
+
+A read-only view of each portfolio: value and total return against starting capital, allocation, positions with unrealized P&L, every AI run (summary, each proposal's rationale and what the risk engine did with it, and the full transcript of what the AI saw and called), and the trade history with each order's risk checks. It refreshes every 30 seconds. The dashboard never places orders or starts AI runs.
 
 ### API
 
@@ -44,6 +57,7 @@ cd backend && uv run pytest
 | GET    | `/portfolios/{id}/agent-runs`| AI run history with decisions              |
 | GET    | `/portfolios/{id}/agent-runs/{run}` | One run, incl. input snapshot and full transcript |
 | GET    | `/market/watchlist`          | The 10 default tracked symbols             |
+| GET    | `/market/clock`              | Whether the US market is open, next open/close |
 | GET    | `/market/prices?symbols=`    | Latest prices (defaults to the watchlist)  |
 | GET    | `/market/bars/{symbol}`      | Historical candles (`timeframe`, `start`, `end`) |
 
