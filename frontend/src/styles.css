@@ -565,3 +565,22 @@ button.primary:disabled,
 button.danger:disabled {
   opacity: 0.6;
 }
+
+/* Owner sign-in */
+.owner,
+.owner-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.owner-form input {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 10px;
+  width: 200px;
+  max-width: 100%;
+}

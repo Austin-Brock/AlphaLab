@@ -1,6 +1,7 @@
 import type { MarketClock, Portfolio } from "../api";
 import { when } from "../format";
 import { REFRESH_SECONDS } from "../useDashboard";
+import { OwnerSignIn } from "./OwnerSignIn";
 
 interface Props {
   portfolios: Portfolio[];
@@ -10,9 +11,23 @@ interface Props {
   updatedAt?: Date;
   loading: boolean;
   onRefresh: () => void;
+  isOwner: boolean;
+  onSignIn: (key: string) => void;
+  onSignOut: () => void;
 }
 
-export function Header({ portfolios, selected, onSelect, clock, updatedAt, loading, onRefresh }: Props) {
+export function Header({
+  portfolios,
+  selected,
+  onSelect,
+  clock,
+  updatedAt,
+  loading,
+  onRefresh,
+  isOwner,
+  onSignIn,
+  onSignOut,
+}: Props) {
   return (
     <header className="topbar">
       <div className="topbar-inner">
@@ -51,6 +66,7 @@ export function Header({ portfolios, selected, onSelect, clock, updatedAt, loadi
           <button className="ghost" onClick={onRefresh} disabled={loading} title={`Refreshes every ${REFRESH_SECONDS}s`}>
             {loading ? "Refreshing…" : updatedAt ? `Updated ${updatedAt.toLocaleTimeString()}` : "Refresh"}
           </button>
+          <OwnerSignIn isOwner={isOwner} onSignIn={onSignIn} onSignOut={onSignOut} />
         </div>
       </div>
     </header>
