@@ -7,7 +7,7 @@ from decimal import Decimal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.market_data.provider import Timeframe
-from app.models import LedgerEntryType, OrderSide, OrderStatus, PortfolioStatus
+from app.models import AgentRunStatus, LedgerEntryType, OrderSide, OrderStatus, PortfolioStatus
 
 
 class PortfolioCreate(BaseModel):
@@ -170,3 +170,43 @@ class OrderOut(BaseModel):
     created_at: datetime
     risk_checks: list[RiskCheckOut]
     execution: ExecutionOut | None
+
+
+class AgentRunCreate(BaseModel):
+    # Optional; a run with the same key for this portfolio is returned instead of re-run.
+    run_key: str | None = Field(default=None, min_length=1, max_length=200)
+
+
+class AgentDecisionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    sequence: int
+    symbol: str
+    side: OrderSide
+    quantity: Decimal
+    rationale: str
+    order: OrderOut | None
+
+
+class AgentRunSummaryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    portfolio_id: uuid.UUID
+    strategy_id: str
+    run_key: str | None
+    status: AgentRunStatus
+    model_id: str | None
+    prompt_version: str | None
+    summary: str | None
+    error: str | None
+    input_tokens: int
+    output_tokens: int
+    started_at: datetime
+    finished_at: datetime | None
+    decisions: list[AgentDecisionOut]
+
+
+class AgentRunOut(AgentRunSummaryOut):
+    input_snapshot: dict
+    transcript: list | None

@@ -21,6 +21,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 from app.market_data.provider import Timeframe
@@ -61,6 +62,14 @@ class OrderStatus(enum.StrEnum):
     REJECTED = "REJECTED"
     APPROVED = "APPROVED"
     FILLED = "FILLED"
+
+
+class AgentRunStatus(enum.StrEnum):
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    # Not run at all, e.g. because the market was closed.
+    SKIPPED = "SKIPPED"
 
 
 class Portfolio(Base):
@@ -253,3 +262,55 @@ class Execution(Base):
     executed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.clock_timestamp()
     )
+
+
+class AgentRun(Base):
+    """One strategy evaluation, with everything needed to reconstruct why it decided what it did."""
+
+    __tablename__ = "agent_runs"
+    __table_args__ = (
+        # Lets a scheduler retry safely: the same run_key never runs twice for a portfolio.
+        UniqueConstraint("portfolio_id", "run_key", name="uq_agent_runs_run_key"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    portfolio_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("portfolios.id"), index=True)
+    strategy_id: Mapped[str] = mapped_column(String(100))
+    run_key: Mapped[str | None] = mapped_column(String(200))
+    status: Mapped[AgentRunStatus] = mapped_column(Enum(AgentRunStatus, name="agent_run_status"))
+    model_id: Mapped[str | None] = mapped_column(String(200))
+    prompt_version: Mapped[str | None] = mapped_column(String(100))
+    # Holdings, cash, limits, and prices exactly as the strategy saw them.
+    input_snapshot: Mapped[dict] = mapped_column(JSONB)
+    # The full model conversation: every tool call, tool result, and reply.
+    transcript: Mapped[list | None] = mapped_column(JSONB)
+    summary: Mapped[str | None] = mapped_column(Text)
+    error: Mapped[str | None] = mapped_column(Text)
+    input_tokens: Mapped[int] = mapped_column(default=0)
+    output_tokens: Mapped[int] = mapped_column(default=0)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.clock_timestamp()
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    decisions: Mapped[list["AgentDecision"]] = relationship(
+        order_by="AgentDecision.sequence", lazy="selectin"
+    )
+
+
+class AgentDecision(Base):
+    """One trade the strategy proposed, linked to the order it became."""
+
+    __tablename__ = "agent_decisions"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    run_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("agent_runs.id"), index=True)
+    portfolio_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("portfolios.id"), index=True)
+    sequence: Mapped[int] = mapped_column()
+    symbol: Mapped[str] = mapped_column(String(20))
+    side: Mapped[OrderSide] = mapped_column(Enum(OrderSide, name="order_side"))
+    quantity: Mapped[Decimal] = mapped_column(Quantity)
+    rationale: Mapped[str] = mapped_column(Text)
+    order_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("orders.id"))
+
+    order: Mapped["Order | None"] = relationship(lazy="selectin")

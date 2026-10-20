@@ -10,12 +10,17 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_execution_settings, get_market_data_provider
+from app.api.deps import (
+    get_execution_settings,
+    get_market_data_provider,
+    get_strategy_resolver,
+)
 from app.config import DEFAULT_WATCHLIST
 from app.db import get_session
 from app.main import app
+from app.strategies.ai import AITradingStrategy
 from app.trading.service import ExecutionSettings
-from tests.fakes import FakeMarketDataProvider
+from tests.fakes import FakeLLM, FakeMarketDataProvider
 
 TEST_DATABASE_URL = os.environ.get(
     "ALPHALAB_TEST_DATABASE_URL",
@@ -57,12 +62,24 @@ def fake_market() -> FakeMarketDataProvider:
 
 
 @pytest.fixture
-def client(session: Session, fake_market: FakeMarketDataProvider) -> Iterator[TestClient]:
+def fake_llm() -> FakeLLM:
+    """Scripted model for API tests; set `fake_llm.turns` before triggering a run."""
+    return FakeLLM()
+
+
+@pytest.fixture
+def client(
+    session: Session, fake_market: FakeMarketDataProvider, fake_llm: FakeLLM
+) -> Iterator[TestClient]:
     app.dependency_overrides[get_session] = lambda: session
     # Always override so tests never call the real Alpaca API, even with keys configured.
     app.dependency_overrides[get_market_data_provider] = lambda: fake_market
     # Default trading settings, regardless of what the local .env sets.
     app.dependency_overrides[get_execution_settings] = ExecutionSettings
+    # Never call AWS from tests.
+    app.dependency_overrides[get_strategy_resolver] = lambda: (
+        lambda sid: AITradingStrategy(fake_llm) if sid == "ai-trading-v1" else None
+    )
     with TestClient(app) as client:
         yield client
     app.dependency_overrides.clear()
