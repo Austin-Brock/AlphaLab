@@ -1,13 +1,16 @@
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
-from app.api import market, orders, portfolios
+from app.agent.service import UnknownStrategyError
+from app.api import agent, market, orders, portfolios
+from app.llm.client import LLMUnavailableError
 from app.market_data.provider import MarketDataUnavailableError
 from app.services.portfolio import PortfolioNotFoundError
 
 app = FastAPI(title="AlphaLab", version="0.1.0")
 app.include_router(portfolios.router)
 app.include_router(orders.router)
+app.include_router(agent.router)
 app.include_router(market.router)
 
 
@@ -20,6 +23,21 @@ def portfolio_not_found(_: Request, exc: PortfolioNotFoundError) -> JSONResponse
 def market_data_unavailable(_: Request, exc: MarketDataUnavailableError) -> JSONResponse:
     return JSONResponse(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content={"detail": str(exc)}
+    )
+
+
+@app.exception_handler(LLMUnavailableError)
+def llm_unavailable(_: Request, exc: LLMUnavailableError) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE, content={"detail": str(exc)}
+    )
+
+
+@app.exception_handler(UnknownStrategyError)
+def unknown_strategy(_: Request, exc: UnknownStrategyError) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        content={"detail": f"{exc}. Agent runs need a portfolio with strategy_id 'ai-trading-v1'."},
     )
 
 

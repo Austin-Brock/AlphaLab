@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from datetime import timedelta
 from functools import lru_cache
 from typing import Annotated
@@ -5,12 +6,17 @@ from typing import Annotated
 from fastapi import Depends
 from sqlalchemy.orm import Session
 
+from app.agent.service import AgentRunService
 from app.config import get_settings
 from app.db import get_session
+from app.llm.bedrock import BedrockLLMClient
+from app.llm.client import LLMClient
 from app.market_data.alpaca import AlpacaMarketDataProvider
 from app.market_data.provider import MarketDataProvider
 from app.services.market_data import MarketDataService
 from app.services.portfolio import PortfolioService
+from app.strategies.ai import AITradingStrategy
+from app.strategies.base import TradingStrategy
 from app.trading.service import ExecutionSettings, TradingService
 
 
@@ -60,6 +66,57 @@ def get_trading_service(
     return TradingService(session, market, settings)
 
 
+@lru_cache
+def get_llm_client() -> LLMClient:
+    """Bedrock client; verifies it is running as the restricted AlphaLab role."""
+    settings = get_settings()
+    return BedrockLLMClient.from_profile(
+        model_id=settings.bedrock_model_id,
+        profile=settings.aws_profile,
+        region=settings.aws_region,
+        expected_role=settings.aws_expected_role,
+    )
+
+
+StrategyResolver = Callable[[str], TradingStrategy | None]
+
+
+def get_strategy_resolver() -> StrategyResolver:
+    """Maps a portfolio's strategy_id to a strategy. Built lazily: AWS is only touched on a run."""
+    settings = get_settings()
+
+    def strategy_for(strategy_id: str) -> TradingStrategy | None:
+        if strategy_id == AITradingStrategy.strategy_id:
+            return AITradingStrategy(
+                get_llm_client(),
+                max_turns=settings.agent_max_turns,
+                max_tokens=settings.agent_max_tokens,
+            )
+        return None
+
+    return strategy_for
+
+
+def get_agent_service(
+    session: Annotated[Session, Depends(get_session)],
+    market: Annotated[MarketDataService, Depends(get_market_data_service)],
+    trading: Annotated[TradingService, Depends(get_trading_service)],
+    strategy_for: Annotated[StrategyResolver, Depends(get_strategy_resolver)],
+    execution: Annotated[ExecutionSettings, Depends(get_execution_settings)],
+) -> AgentRunService:
+    settings = get_settings()
+    return AgentRunService(
+        session,
+        market,
+        trading,
+        strategy_for,
+        watchlist=settings.watchlist,
+        max_proposals=settings.agent_max_proposals,
+        require_market_open=execution.enforce_market_hours,
+    )
+
+
 PortfolioServiceDep = Annotated[PortfolioService, Depends(get_portfolio_service)]
 MarketDataServiceDep = Annotated[MarketDataService, Depends(get_market_data_service)]
 TradingServiceDep = Annotated[TradingService, Depends(get_trading_service)]
+AgentRunServiceDep = Annotated[AgentRunService, Depends(get_agent_service)]

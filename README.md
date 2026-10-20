@@ -4,7 +4,7 @@ A simulated autonomous trading bot platform.
 
 AlphaLab starts an AI-managed portfolio with **$1,000,000 in simulated cash** and lets it trade autonomously against **real market data** — researching stocks, proposing trades, managing risk, and explaining every decision — while you watch its performance on a dashboard.
 
-> **Status:** Milestones 1–3 complete (Portfolio Foundation, Market Data, Trading Engine). See the full [development plan](docs/PLAN.md).
+> **Status:** Milestones 1–4 complete (Portfolio Foundation, Market Data, Trading Engine, AI Trading Agent). See the full [development plan](docs/PLAN.md).
 
 ## Getting started
 
@@ -40,6 +40,9 @@ cd backend && uv run pytest
 | POST   | `/portfolios/{id}/orders`    | Submit an order (risk-checked, then filled) |
 | GET    | `/portfolios/{id}/orders`    | Order history with risk check results      |
 | GET    | `/portfolios/{id}/executions`| Every simulated fill                       |
+| POST   | `/portfolios/{id}/agent-runs`| Run the AI strategy now (proposals → risk engine → fills) |
+| GET    | `/portfolios/{id}/agent-runs`| AI run history with decisions              |
+| GET    | `/portfolios/{id}/agent-runs/{run}` | One run, incl. input snapshot and full transcript |
 | GET    | `/market/watchlist`          | The 10 default tracked symbols             |
 | GET    | `/market/prices?symbols=`    | Latest prices (defaults to the watchlist)  |
 | GET    | `/market/bars/{symbol}`      | Historical candles (`timeframe`, `start`, `end`) |
@@ -62,12 +65,20 @@ Every order passes through the risk engine before anything moves. Orders that br
 
 Approved orders fill immediately at the latest market price plus 0.05% slippage (buys pay more, sells receive less), with $0 commission. The fill, its ledger entry, and the position update are written in one transaction. Resubmitting an order with the same `client_order_id` returns the original instead of trading twice.
 
+### AI agent
+
+A portfolio with `strategy_id: "ai-trading-v1"` can run the AI strategy. The model gets four tools — `get_portfolio`, `get_latest_prices`, `get_price_history`, and `propose_trade` — limited to the watchlist and at most 5 proposals per run. `propose_trade` refuses a symbol until the model has pulled its price history, so every trade is backed by research. It only records a proposal; after the model finishes, each proposal becomes an ordinary order through the risk engine (sells first). The AI never executes anything itself.
+
+Every run stores what's needed to reconstruct the decision: the portfolio snapshot it saw (holdings, cash, prices, limits), model ID, prompt version, the full conversation including every tool call and result, each proposal with its rationale linked to the resulting order, and token usage. When market hours are enforced and the market is closed, runs are skipped without calling the model.
+
+AWS access uses a dedicated `alphalab` profile with a permission set that can only invoke the allowed models; the app refuses to start a run under any other role.
+
 Market data is cached in Postgres. Latest prices are reused for 60 seconds. If Alpaca is unreachable, the API serves the last known data with `stale: true` and a `provider_error` message instead of failing.
 
 ## How it works
 
 ```
-Scheduler → AI Strategy (AWS Bedrock) → Trade Proposal → Risk Engine → Execution Engine → Portfolio Ledger
+Agent run → AI Strategy (AWS Bedrock) → Trade Proposals → Risk Engine → Execution Engine → Portfolio Ledger
 ```
 
 The AI **proposes**; the risk and execution engines **decide**. Portfolio accounting knows nothing about AI, so any future strategy (momentum, mean reversion, buy-and-hold) plugs into the same pipeline.
@@ -75,7 +86,7 @@ The AI **proposes**; the risk and execution engines **decide**. Portfolio accoun
 ## Stack
 
 - **Backend:** Python, FastAPI, SQLAlchemy, PostgreSQL
-- **AI:** AWS Bedrock + Strands Agents
+- **AI:** AWS Bedrock Converse API (currently `openai.gpt-oss-120b`; any tool-using Bedrock model works)
 - **Market data:** Alpaca
 - **Frontend:** React + TypeScript
 - **Background jobs:** Celery + Redis

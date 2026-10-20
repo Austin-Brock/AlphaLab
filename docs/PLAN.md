@@ -213,7 +213,7 @@ When multiple simulations arrive, a `simulations` table can reference portfolios
 
 ### Milestone 4 — AI Trading Agent
 
-Introduce AWS Bedrock and Strands Agents.
+Introduce AWS Bedrock. *(Built on the Bedrock Converse API directly rather than Strands: the tool loop is small, and owning it makes every prompt, tool call, and result straightforward to record. The model is `openai.gpt-oss-120b` for now; it is a config change to swap in another Bedrock model such as Claude once Anthropic model access is enabled on the account.)*
 
 - Give the AI access to portfolio information.
 - Give it access to market data.
@@ -275,7 +275,7 @@ If the AI sells AAPL, we should be able to inspect exactly what information it h
 | Layer           | Choice                                      |
 | --------------- | ------------------------------------------- |
 | Backend         | Python, FastAPI, SQLAlchemy, PostgreSQL     |
-| AI              | AWS Bedrock + Strands Agents                |
+| AI              | AWS Bedrock (Converse API)                  |
 | Market data     | Alpaca                                      |
 | Frontend        | React + TypeScript                          |
 | Background jobs | Celery + Redis                              |
@@ -301,4 +301,6 @@ Items to resolve before or during the relevant milestone:
 - ~~**Market calendar.**~~ Milestone 3 uses Alpaca's market clock (handles holidays and half-days) and fails closed if it can't be reached. All timestamps are stored in UTC.
 - **Alpaca data tier.** The free tier provides IEX-only real-time data; confirm that's acceptable or budget for SIP.
 - **Scheduler weight.** For a single daily evaluation, APScheduler inside the app may be simpler than Celery + Redis; revisit if job volume grows.
-- **Idempotency.** Orders are idempotent per `client_order_id` and each order can fill at most once (Milestone 3). Agent runs still need the same protection in Milestone 4.
+- ~~**Idempotency.**~~ Orders are idempotent per `client_order_id`, each order fills at most once, and agent runs are idempotent per `run_key` (for the Milestone 5 scheduler).
+- **Research depth.** In the first live run, gpt-oss-120b proposed trades without calling `get_price_history`, so rationales were generic. Resolved for now in prompt `ai-trading-v1.1`: `propose_trade` refuses a symbol until its price history has been pulled in the same session. The check is per symbol, not tied to the watchlist, so it carries over if the tradable universe grows. Prompt iteration and a stronger model remain options.
+- **Tradable universe.** The agent trades only the 10 watchlist symbols. Widening it is a config change (`ALPHALAB_WATCHLIST`) but affects research cost per run and how the model picks candidates.

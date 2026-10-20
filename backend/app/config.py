@@ -37,6 +37,18 @@ class Settings(BaseSettings):
     # Flat commission charged per filled order.
     commission_per_order: Decimal = Decimal("0")
 
+    # AI trading agent (AWS Bedrock).
+    # The AWS profile must use the restricted AlphaLabBedrock role; the app refuses any other.
+    aws_profile: str = "alphalab"
+    aws_region: str = "us-east-1"
+    aws_expected_role: str = "AlphaLabBedrock"
+    # Any Bedrock model that supports tool use via the Converse API.
+    bedrock_model_id: str = "openai.gpt-oss-120b-1:0"
+    agent_max_proposals: int = 5
+    # Upper bound on model round-trips per run, to cap cost if the model loops.
+    agent_max_turns: int = 20
+    agent_max_tokens: int = 4096
+
     @field_validator("watchlist", mode="before")
     @classmethod
     def split_watchlist(cls, value: str | list[str]) -> list[str]:
