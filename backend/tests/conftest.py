@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session
 
+from app.api.auth import get_admin_key
 from app.api.deps import (
     get_execution_settings,
     get_market_data_provider,
@@ -27,6 +28,8 @@ TEST_DATABASE_URL = os.environ.get(
     "postgresql+psycopg://alphalab:alphalab@localhost:5432/alphalab_test",
 )
 BACKEND_DIR = Path(__file__).resolve().parent.parent
+TEST_ADMIN_KEY = "test-admin-key-" + "x" * 32
+OWNER_HEADERS = {"Authorization": f"Bearer {TEST_ADMIN_KEY}"}
 
 
 @pytest.fixture(scope="session")
@@ -68,10 +71,9 @@ def fake_llm() -> FakeLLM:
 
 
 @pytest.fixture
-def client(
-    session: Session, fake_market: FakeMarketDataProvider, fake_llm: FakeLLM
-) -> Iterator[TestClient]:
+def app_overrides(session: Session, fake_market: FakeMarketDataProvider, fake_llm: FakeLLM):
     app.dependency_overrides[get_session] = lambda: session
+    app.dependency_overrides[get_admin_key] = lambda: TEST_ADMIN_KEY
     # Always override so tests never call the real Alpaca API, even with keys configured.
     app.dependency_overrides[get_market_data_provider] = lambda: fake_market
     # Default trading settings, regardless of what the local .env sets.
@@ -80,6 +82,19 @@ def client(
     app.dependency_overrides[get_strategy_resolver] = lambda: (
         lambda sid: AITradingStrategy(fake_llm) if sid == "ai-trading-v1" else None
     )
+    yield
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def client(app_overrides) -> Iterator[TestClient]:
+    """The owner: sends the admin key with every request."""
+    with TestClient(app, headers=OWNER_HEADERS) as client:
+        yield client
+
+
+@pytest.fixture
+def visitor(app_overrides) -> Iterator[TestClient]:
+    """A member of the public: no admin key."""
     with TestClient(app) as client:
         yield client
-    app.dependency_overrides.clear()

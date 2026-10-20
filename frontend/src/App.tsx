@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { api, type Portfolio } from "./api";
+import { api, ApiError, loadAdminKey, setAdminKey, type Portfolio } from "./api";
 import { AgentRuns } from "./components/AgentRuns";
 import { Header } from "./components/Header";
 import { Orders } from "./components/Orders";
@@ -17,6 +17,28 @@ export function App() {
   const [portfolios, setPortfolios] = useState<Portfolio[]>();
   const [loadError, setLoadError] = useState<string>();
   const [selectedId, setSelectedId] = useState(portfolioFromHash);
+  const [isOwner, setIsOwner] = useState(false);
+
+  const signIn = (key: string) => {
+    setAdminKey(key);
+    setIsOwner(true);
+  };
+  const signOut = () => {
+    setAdminKey(undefined);
+    setIsOwner(false);
+  };
+
+  useEffect(() => {
+    // Re-check a remembered key; drop it if the server no longer accepts it.
+    const key = loadAdminKey();
+    if (!key) return;
+    api
+      .checkAdminKey(key)
+      .then(() => setIsOwner(true))
+      .catch((e) => {
+        if (e instanceof ApiError && e.status === 401) signOut();
+      });
+  }, []);
 
   const loadPortfolios = () =>
     api
@@ -69,11 +91,16 @@ export function App() {
         updatedAt={dashboard.updatedAt}
         loading={dashboard.loading}
         onRefresh={() => void dashboard.refresh()}
+        isOwner={isOwner}
+        onSignIn={signIn}
+        onSignOut={signOut}
       />
       <main className="page">
         <TradingControl
           portfolio={portfolio}
           lastChange={dashboard.statusChanges.data?.[0]}
+          isOwner={isOwner}
+          onUnauthorized={signOut}
           onChanged={() => {
             void loadPortfolios();
             void dashboard.refresh();

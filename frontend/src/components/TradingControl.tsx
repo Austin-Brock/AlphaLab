@@ -1,16 +1,18 @@
 import { useState } from "react";
 
-import { api, type Portfolio, type StatusChange } from "../api";
+import { api, ApiError, type Portfolio, type StatusChange } from "../api";
 import { when } from "../format";
 
 interface Props {
   portfolio: Portfolio;
   lastChange?: StatusChange;
+  isOwner: boolean;
   onChanged: () => void;
+  onUnauthorized: () => void;
 }
 
 /** The trading brake: pausing makes the risk engine reject every order and skips AI runs. */
-export function TradingControl({ portfolio, lastChange, onChanged }: Props) {
+export function TradingControl({ portfolio, lastChange, isOwner, onChanged, onUnauthorized }: Props) {
   const [confirming, setConfirming] = useState(false);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
@@ -30,6 +32,10 @@ export function TradingControl({ portfolio, lastChange, onChanged }: Props) {
       setReason("");
       onChanged();
     } catch (e) {
+      if (e instanceof ApiError && e.status === 401) {
+        setConfirming(false);
+        onUnauthorized();
+      }
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
@@ -51,7 +57,7 @@ export function TradingControl({ portfolio, lastChange, onChanged }: Props) {
         </span>
       </div>
 
-      {!confirming ? (
+      {!isOwner ? null : !confirming ? (
         <button className={paused ? "primary" : "danger"} onClick={() => setConfirming(true)}>
           {paused ? "Resume trading" : "Pause trading"}
         </button>

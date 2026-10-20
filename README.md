@@ -13,7 +13,7 @@ Requires Docker, [uv](https://docs.astral.sh/uv/), and Node.js 20+ (for the dash
 ```bash
 docker compose up -d --wait          # Postgres (dev + test databases)
 cd backend
-cp .env.example .env                 # add your Alpaca paper-trading keys
+cp .env.example .env                 # add Alpaca paper-trading keys and an admin key
 uv sync
 uv run alembic upgrade head          # create the schema
 uv run python -m app.seed            # create the $1M AlphaLab AI Portfolio
@@ -37,7 +37,16 @@ cd frontend && npm test && npm run build
 
 ### Dashboard
 
-A read-only view of each portfolio: value and total return against starting capital, allocation, positions with unrealized P&L, every AI run (summary, each proposal's rationale and what the risk engine did with it, and the full transcript of what the AI saw and called), and the trade history with each order's risk checks. It refreshes every 30 seconds. The dashboard never places orders or starts AI runs; its only control is the pause/resume switch.
+A read-only view of each portfolio: value and total return against starting capital, allocation, positions with unrealized P&L, every AI run (summary, each proposal's rationale and what the risk engine did with it, and the full transcript of what the AI saw and called), and the trade history with each order's risk checks. It refreshes every 30 seconds. The dashboard never places orders or starts AI runs; its only control is the pause/resume switch, shown only to the owner.
+
+### Access
+
+AlphaLab is built to be shared publicly while only its owner can change anything:
+
+- **Reads are public.** Anyone can view portfolios, trades, AI runs and transcripts.
+- **Every change needs the admin key** (`ALPHALAB_ADMIN_KEY`, at least 32 characters; `openssl rand -hex 32`), sent as `Authorization: Bearer <key>`. This is enforced for every non-read request across the whole API, so new endpoints are protected by default. With no key configured, all changes are refused.
+- **Owner sign-in:** the dashboard's "Owner sign-in" checks the key with the server and remembers it in that browser only. Visitors never see the pause/resume control.
+- **Visitors can't run up costs:** price lookups are limited to the watchlist for visitors, and price-history ranges are capped per timeframe for everyone.
 
 ### Pause and resume
 
@@ -65,10 +74,11 @@ Pausing a portfolio is the trading brake. While paused, the risk engine rejects 
 | GET    | `/portfolios/{id}/agent-runs/{run}` | One run, incl. input snapshot and full transcript |
 | GET    | `/market/watchlist`          | The 10 default tracked symbols             |
 | GET    | `/market/clock`              | Whether the US market is open, next open/close |
+| GET    | `/admin/check`               | 204 if the request carries the admin key   |
 | GET    | `/market/prices?symbols=`    | Latest prices (defaults to the watchlist)  |
 | GET    | `/market/bars/{symbol}`      | Historical candles (`timeframe`, `start`, `end`) |
 
-Money is returned as decimal strings, never floats.
+Money is returned as decimal strings, never floats. Every `POST` requires the admin key (see [Access](#access)).
 
 ### Trading
 

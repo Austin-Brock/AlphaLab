@@ -133,9 +133,39 @@ export class ApiError extends Error {
   }
 }
 
+// Owner sign-in. Reads are public; the server requires this key for every change.
+// Kept in this browser only, so the owner doesn't have to re-enter it on each visit.
+const ADMIN_KEY_STORAGE = "alphalab.adminKey";
+
+export function loadAdminKey(): string | undefined {
+  try {
+    return localStorage.getItem(ADMIN_KEY_STORAGE) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function saveAdminKey(key: string | undefined): void {
+  try {
+    if (key) localStorage.setItem(ADMIN_KEY_STORAGE, key);
+    else localStorage.removeItem(ADMIN_KEY_STORAGE);
+  } catch {
+    // Storage unavailable (e.g. private mode): the key lasts until the page closes.
+  }
+}
+
+let adminKey = loadAdminKey();
+
+export function setAdminKey(key: string | undefined): void {
+  adminKey = key;
+  saveAdminKey(key);
+}
+
 // The dashboard never places orders or starts agent runs. Its only write is pause/resume.
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`/api${path}`, init);
+async function request<T>(path: string, init: RequestInit = {}, key = adminKey): Promise<T> {
+  const headers = new Headers(init.headers);
+  if (key) headers.set("Authorization", `Bearer ${key}`);
+  const response = await fetch(`/api${path}`, { ...init, headers });
   if (!response.ok) {
     let detail = response.statusText;
     try {
@@ -145,6 +175,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
     throw new ApiError(response.status, typeof detail === "string" ? detail : JSON.stringify(detail));
   }
+  if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
 
@@ -166,4 +197,5 @@ export const api = {
   statusChanges: (id: string) => get<StatusChange[]>(`/portfolios/${id}/status-changes`),
   pause: (id: string, reason?: string) => post<Portfolio>(`/portfolios/${id}/pause`, { reason: reason || null }),
   resume: (id: string) => post<Portfolio>(`/portfolios/${id}/resume`, {}),
+  checkAdminKey: (key: string) => request<void>("/admin/check", {}, key),
 };

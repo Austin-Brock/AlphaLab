@@ -17,6 +17,10 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("ALPHALAB_DATABASE_URL", "DATABASE_URL"),
     )
 
+    # Owner key for every change (orders, pause/resume, agent runs). Reads stay public.
+    # Unset means all changes are refused. Generate with: openssl rand -hex 32
+    admin_key: SecretStr | None = None
+
     # Alpaca market data. Keys come from a free paper-trading account.
     alpaca_api_key: SecretStr | None = None
     alpaca_secret_key: SecretStr | None = None
@@ -52,6 +56,13 @@ class Settings(BaseSettings):
     # Upper bound on model round-trips per run, to cap cost if the model loops.
     agent_max_turns: int = 20
     agent_max_tokens: int = 4096
+
+    @field_validator("admin_key")
+    @classmethod
+    def admin_key_is_long(cls, value: SecretStr | None) -> SecretStr | None:
+        if value is not None and len(value.get_secret_value()) < 32:
+            raise ValueError("admin_key must be at least 32 characters")
+        return value
 
     @field_validator("database_url")
     @classmethod
