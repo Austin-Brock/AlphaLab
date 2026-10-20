@@ -101,6 +101,14 @@ class LatestPricesOut(BaseModel):
     provider_error: str | None
 
 
+class MarketClockOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    is_open: bool
+    next_open: datetime
+    next_close: datetime
+
+
 class BarOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

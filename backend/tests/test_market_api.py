@@ -96,3 +96,18 @@ def test_portfolio_value_uses_market_prices(client, session, fake_market):
     [nvda] = client.get(f"/portfolios/{other_id}/value").json()["positions"]
     assert nvda["priced_at_cost"] is True
     assert nvda["price"] == "5.0000"
+
+
+def test_market_clock(client, fake_market):
+    fake_market.market_open = False
+    body = client.get("/market/clock").json()
+    assert body == {
+        "is_open": False,
+        "next_open": "2026-10-20T13:30:00Z",
+        "next_close": "2026-10-19T20:00:00Z",
+    }
+
+
+def test_market_clock_outage_returns_503(client, fake_market):
+    fake_market.fail = True
+    assert client.get("/market/clock").status_code == 503

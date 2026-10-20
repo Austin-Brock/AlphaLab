@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from app.api.deps import MarketDataServiceDep
 from app.config import get_settings
 from app.market_data.provider import Timeframe
-from app.schemas import BarSeriesOut, LatestPricesOut
+from app.schemas import BarSeriesOut, LatestPricesOut, MarketClockOut
 
 router = APIRouter(prefix="/market", tags=["market data"])
 
@@ -30,6 +30,11 @@ def parse_symbols(raw: str) -> list[str]:
 @router.get("/watchlist", response_model=list[str])
 def get_watchlist():
     return get_settings().watchlist
+
+
+@router.get("/clock", response_model=MarketClockOut)
+def get_clock(market: MarketDataServiceDep):
+    return market.get_market_clock()
 
 
 @router.get("/prices", response_model=LatestPricesOut)
