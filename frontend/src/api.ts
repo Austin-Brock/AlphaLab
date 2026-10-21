@@ -33,6 +33,19 @@ export interface PortfolioValue {
   positions: PositionValuation[];
 }
 
+export interface ValuePoint {
+  date: string;
+  value: string;
+  benchmark_value: string | null;
+}
+
+export interface ValueHistory {
+  portfolio_id: string;
+  benchmark: string;
+  points: ValuePoint[];
+  stale: boolean;
+}
+
 export interface RiskCheck {
   check_name: string;
   passed: boolean;
@@ -192,6 +205,7 @@ const post = <T>(path: string, body: unknown) =>
 export const api = {
   portfolios: () => get<Portfolio[]>("/portfolios"),
   value: (id: string) => get<PortfolioValue>(`/portfolios/${id}/value`),
+  valueHistory: (id: string) => get<ValueHistory>(`/portfolios/${id}/value-history`),
   orders: (id: string) => get<Order[]>(`/portfolios/${id}/orders`),
   agentRuns: (id: string) => get<AgentRunSummary[]>(`/portfolios/${id}/agent-runs`),
   agentRun: (id: string, runId: string) => get<AgentRun>(`/portfolios/${id}/agent-runs/${runId}`),

@@ -43,3 +43,19 @@ export function duration(startIso: string, endIso: string | null): string {
 export function tone(value: number): "up" | "down" | "flat" {
   return value > 0 ? "up" : value < 0 ? "down" : "flat";
 }
+
+const dayFormat = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+
+/** "2026-10-21" → "Oct 21". Dates are trading days, so no timezone shifting. */
+export function day(isoDate: string): string {
+  return dayFormat.format(new Date(`${isoDate}T00:00:00Z`));
+}
+
+/** Axis labels like "$1.005M", with just enough decimals to tell ticks `step` apart. */
+export function axisMoney(value: number, step: number): string {
+  const [unit, suffix] = Math.abs(value) >= 1e6 ? [1e6, "M"] : Math.abs(value) >= 1e3 ? [1e3, "K"] : [1, ""];
+  const scaled = step / unit;
+  let digits = 0;
+  while (digits < 4 && Math.abs(Math.round(scaled * 10 ** digits) - scaled * 10 ** digits) > 1e-9) digits++;
+  return `$${(value / unit).toFixed(digits)}${suffix}`;
+}

@@ -8,6 +8,7 @@ import { Overview } from "./components/Overview";
 import { Positions } from "./components/Positions";
 import { AutoTradeControl } from "./components/AutoTradeControl";
 import { TradingControl } from "./components/TradingControl";
+import { ValueChart } from "./components/ValueChart";
 import { useDashboard } from "./useDashboard";
 
 function portfolioFromHash(): string | undefined {
@@ -114,6 +115,7 @@ export function App() {
           onUnauthorized={signOut}
         />
         <Overview portfolio={portfolio} value={dashboard.value} />
+        <ValueChart history={dashboard.history} />
         <Positions value={dashboard.value} />
         <AgentRuns portfolioId={portfolio.id} runs={dashboard.runs} />
         <Orders orders={dashboard.orders} />

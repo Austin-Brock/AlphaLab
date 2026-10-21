@@ -14,6 +14,7 @@ from app.llm.client import LLMClient
 from app.market_data.alpaca import AlpacaMarketDataProvider
 from app.market_data.provider import MarketDataProvider
 from app.services.market_data import MarketDataService
+from app.services.performance import PerformanceService
 from app.services.portfolio import PortfolioService
 from app.strategies.ai import AITradingStrategy
 from app.strategies.base import TradingStrategy
@@ -46,6 +47,13 @@ def get_market_data_service(
     return MarketDataService(
         session, provider, cache_ttl=timedelta(seconds=get_settings().price_cache_ttl_seconds)
     )
+
+
+def get_performance_service(
+    session: Annotated[Session, Depends(get_session)],
+    market: Annotated[MarketDataService, Depends(get_market_data_service)],
+) -> PerformanceService:
+    return PerformanceService(session, market, benchmark=get_settings().benchmark_symbol)
 
 
 def get_execution_settings() -> ExecutionSettings:
@@ -118,5 +126,6 @@ def get_agent_service(
 
 PortfolioServiceDep = Annotated[PortfolioService, Depends(get_portfolio_service)]
 MarketDataServiceDep = Annotated[MarketDataService, Depends(get_market_data_service)]
+PerformanceServiceDep = Annotated[PerformanceService, Depends(get_performance_service)]
 TradingServiceDep = Annotated[TradingService, Depends(get_trading_service)]
 AgentRunServiceDep = Annotated[AgentRunService, Depends(get_agent_service)]

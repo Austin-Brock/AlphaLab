@@ -7,6 +7,7 @@ import {
   type Order,
   type PortfolioValue,
   type StatusChange,
+  type ValueHistory,
 } from "./api";
 
 export const REFRESH_SECONDS = 30;
@@ -18,6 +19,7 @@ export interface Loaded<T> {
 
 export interface DashboardData {
   value: Loaded<PortfolioValue>;
+  history: Loaded<ValueHistory>;
   orders: Loaded<Order[]>;
   runs: Loaded<AgentRunSummary[]>;
   clock: Loaded<MarketClock>;
@@ -28,6 +30,7 @@ export interface DashboardData {
 
 const EMPTY: DashboardData = {
   value: {},
+  history: {},
   orders: {},
   runs: {},
   clock: {},
@@ -48,8 +51,9 @@ export function useDashboard(portfolioId: string | undefined) {
   const refresh = useCallback(async () => {
     if (!portfolioId) return;
     setState((s) => ({ ...s, loading: true }));
-    const [value, orders, runs, clock, statusChanges] = await Promise.allSettled([
+    const [value, history, orders, runs, clock, statusChanges] = await Promise.allSettled([
       api.value(portfolioId),
+      api.valueHistory(portfolioId),
       api.orders(portfolioId),
       api.agentRuns(portfolioId),
       api.clock(),
@@ -57,6 +61,7 @@ export function useDashboard(portfolioId: string | undefined) {
     ]);
     setState({
       value: settle(value),
+      history: settle(history),
       orders: settle(orders),
       runs: settle(runs),
       clock: settle(clock),

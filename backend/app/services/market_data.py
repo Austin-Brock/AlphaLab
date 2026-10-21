@@ -121,8 +121,25 @@ class MarketDataService:
         )
 
     def get_bars(
-        self, symbol: str, timeframe: Timeframe, start: datetime, end: datetime
+        self,
+        symbol: str,
+        timeframe: Timeframe,
+        start: datetime,
+        end: datetime,
+        max_age: timedelta | None = None,
     ) -> BarSeries:
+        """Bars in [start, end]. With `max_age`, cached bars fetched that recently are
+        served without calling the provider."""
+        if max_age is not None:
+            cached = self._load_bars(symbol, timeframe, start, end)
+            if (
+                cached
+                and max(b.fetched_at for b in cached) >= self.now() - max_age
+                # The cache may only hold a shorter range fetched by someone else.
+                and cached[0].timestamp <= start + timedelta(days=5)
+            ):
+                return BarSeries(symbol=symbol, timeframe=timeframe, bars=cached)
+
         provider_error = None
         try:
             bars = self._provider().get_bars(symbol, timeframe, start, end)
@@ -157,19 +174,7 @@ class MarketDataService:
                 )
             self.session.commit()
 
-        cached = list(
-            self.session.scalars(
-                select(PriceBar)
-                .where(
-                    PriceBar.symbol == symbol,
-                    PriceBar.timeframe == timeframe,
-                    PriceBar.timestamp >= start,
-                    PriceBar.timestamp <= end,
-                )
-                .order_by(PriceBar.timestamp)
-                .execution_options(populate_existing=True)
-            )
-        )
+        cached = self._load_bars(symbol, timeframe, start, end)
         if provider_error and not cached:
             raise MarketDataUnavailableError(provider_error)
         return BarSeries(
@@ -182,6 +187,23 @@ class MarketDataService:
 
     def get_market_clock(self) -> MarketClock:
         return self._provider().get_market_clock()
+
+    def _load_bars(
+        self, symbol: str, timeframe: Timeframe, start: datetime, end: datetime
+    ) -> list[PriceBar]:
+        return list(
+            self.session.scalars(
+                select(PriceBar)
+                .where(
+                    PriceBar.symbol == symbol,
+                    PriceBar.timeframe == timeframe,
+                    PriceBar.timestamp >= start,
+                    PriceBar.timestamp <= end,
+                )
+                .order_by(PriceBar.timestamp)
+                .execution_options(populate_existing=True)
+            )
+        )
 
     def _load_latest(self, symbols: Sequence[str]) -> dict[str, LatestPrice]:
         # populate_existing refreshes rows already in the session after an upsert.

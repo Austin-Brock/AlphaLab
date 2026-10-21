@@ -32,6 +32,8 @@ class Settings(BaseSettings):
 
     # Securities shown by default. Env format: ALPHALAB_WATCHLIST=AAPL,MSFT,SPY
     watchlist: Annotated[list[str], NoDecode] = DEFAULT_WATCHLIST
+    # What the dashboard's value chart compares each portfolio against.
+    benchmark_symbol: str = "SPY"
     # How long a fetched latest price is served from cache before refetching.
     price_cache_ttl_seconds: int = 60
 

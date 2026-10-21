@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from fastapi import APIRouter, status
 
-from app.api.deps import MarketDataServiceDep, PortfolioServiceDep
+from app.api.deps import MarketDataServiceDep, PerformanceServiceDep, PortfolioServiceDep
 from app.market_data.provider import MarketDataUnavailableError
 from app.schemas import (
     AutoTradeRequest,
@@ -16,6 +16,7 @@ from app.schemas import (
     PositionOut,
     StatusChangeOut,
     StatusChangeRequest,
+    ValueHistoryOut,
 )
 from app.services.portfolio import PortfolioService, PortfolioValuation
 
@@ -84,6 +85,12 @@ def get_ledger(portfolio_id: uuid.UUID, service: PortfolioServiceDep):
 @router.get("/{portfolio_id}/value", response_model=PortfolioValueOut)
 def get_value(portfolio_id: uuid.UUID, service: PortfolioServiceDep, market: MarketDataServiceDep):
     return value_portfolio(portfolio_id, service, market)
+
+
+@router.get("/{portfolio_id}/value-history", response_model=ValueHistoryOut)
+def get_value_history(portfolio_id: uuid.UUID, performance: PerformanceServiceDep):
+    """Daily closing value since the start, next to the same money held in the benchmark."""
+    return performance.value_history(portfolio_id)
 
 
 @router.post("/{portfolio_id}/pause", response_model=PortfolioOut)
