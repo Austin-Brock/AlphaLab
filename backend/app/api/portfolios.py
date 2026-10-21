@@ -6,6 +6,7 @@ from fastapi import APIRouter, status
 from app.api.deps import MarketDataServiceDep, PortfolioServiceDep
 from app.market_data.provider import MarketDataUnavailableError
 from app.schemas import (
+    AutoTradeRequest,
     CashBalanceOut,
     LedgerEntryOut,
     PortfolioCreate,
@@ -103,3 +104,9 @@ def resume_portfolio(
 @router.get("/{portfolio_id}/status-changes", response_model=list[StatusChangeOut])
 def get_status_changes(portfolio_id: uuid.UUID, service: PortfolioServiceDep):
     return service.get_status_changes(portfolio_id)
+
+
+@router.post("/{portfolio_id}/auto-trade", response_model=PortfolioOut)
+def set_auto_trade(portfolio_id: uuid.UUID, body: AutoTradeRequest, service: PortfolioServiceDep):
+    """Opt in or out of the scheduled daily AI run."""
+    return service.set_auto_trade(portfolio_id, body.enabled)

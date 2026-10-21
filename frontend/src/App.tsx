@@ -6,6 +6,7 @@ import { Header } from "./components/Header";
 import { Orders } from "./components/Orders";
 import { Overview } from "./components/Overview";
 import { Positions } from "./components/Positions";
+import { AutoTradeControl } from "./components/AutoTradeControl";
 import { TradingControl } from "./components/TradingControl";
 import { useDashboard } from "./useDashboard";
 
@@ -105,6 +106,12 @@ export function App() {
             void loadPortfolios();
             void dashboard.refresh();
           }}
+        />
+        <AutoTradeControl
+          portfolio={portfolio}
+          isOwner={isOwner}
+          onChanged={() => void loadPortfolios()}
+          onUnauthorized={signOut}
         />
         <Overview portfolio={portfolio} value={dashboard.value} />
         <Positions value={dashboard.value} />

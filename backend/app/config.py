@@ -47,7 +47,8 @@ class Settings(BaseSettings):
 
     # AI trading agent (AWS Bedrock).
     # The AWS profile must use the restricted AlphaLabBedrock role; the app refuses any other.
-    aws_profile: str = "alphalab"
+    # Empty means "use credentials from the environment" (the GitHub Actions daily run).
+    aws_profile: str | None = "alphalab"
     aws_region: str = "us-east-1"
     aws_expected_role: str = "AlphaLabBedrock"
     # Any Bedrock model that supports tool use via the Converse API.
@@ -56,6 +57,9 @@ class Settings(BaseSettings):
     # Upper bound on model round-trips per run, to cap cost if the model loops.
     agent_max_turns: int = 20
     agent_max_tokens: int = 4096
+    # The scheduled daily run waits until this time, US Eastern, so the opening
+    # volatility has settled. Format HH:MM.
+    daily_run_after: str = "10:00"
 
     @field_validator("admin_key")
     @classmethod
@@ -63,6 +67,11 @@ class Settings(BaseSettings):
         if value is not None and len(value.get_secret_value()) < 32:
             raise ValueError("admin_key must be at least 32 characters")
         return value
+
+    @field_validator("aws_profile")
+    @classmethod
+    def blank_profile_means_environment(cls, value: str | None) -> str | None:
+        return value or None
 
     @field_validator("database_url")
     @classmethod

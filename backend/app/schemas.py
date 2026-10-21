@@ -28,7 +28,12 @@ class PortfolioOut(BaseModel):
     status: PortfolioStatus
     max_position_pct: Decimal
     min_cash_pct: Decimal
+    auto_trade: bool
     created_at: datetime
+
+
+class AutoTradeRequest(BaseModel):
+    enabled: bool
 
 
 class StatusChangeRequest(BaseModel):

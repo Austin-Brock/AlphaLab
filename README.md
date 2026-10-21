@@ -6,7 +6,7 @@ AlphaLab starts an AI-managed portfolio with **$1,000,000 in simulated cash** an
 
 **Live:** https://alphalab-austin.vercel.app
 
-> **Status:** Milestones 1–4 complete (Portfolio Foundation, Market Data, Trading Engine, AI Trading Agent). Milestone 5 in progress: the dashboard and pause/resume are built; scheduling is next. See the full [development plan](docs/PLAN.md).
+> **Status:** Milestones 1–4 complete (Portfolio Foundation, Market Data, Trading Engine, AI Trading Agent). Milestone 5 in progress: the dashboard, pause/resume and the scheduled daily run are built. See the full [development plan](docs/PLAN.md).
 
 ## The dashboard
 
@@ -17,7 +17,7 @@ Anyone can view the live dashboard. It shows, for each portfolio:
 - **AI decisions:** every run's summary, each proposed trade with the AI's reasoning and what the risk engine did with it, and the full record of what the AI looked at
 - **Trade history,** including every risk check on every order
 
-The site is read-only for visitors. Only the owner can change anything — placing orders, running the AI, or pausing trading.
+The site is read-only for visitors. Only the owner can change anything — placing orders, running the AI, switching auto-trade on or off, or pausing trading.
 
 ## How it works
 
@@ -48,6 +48,10 @@ Every order passes through the risk engine before anything moves. Orders that br
 | Position concentration | No single stock > 10% of the portfolio |
 
 Approved orders fill at the latest market price plus 0.05% slippage (buys pay more, sells receive less), with no commission. A submitted order can never fill twice.
+
+### Daily runs
+
+Portfolios with **auto-trade** switched on are traded automatically once each trading day, around 10am US Eastern, by a scheduled GitHub Actions job. Each portfolio runs at most once a day; weekends, market holidays and paused portfolios are skipped. Every run appears on the dashboard like any other.
 
 ### Pause and resume
 

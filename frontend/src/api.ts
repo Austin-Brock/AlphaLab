@@ -12,6 +12,7 @@ export interface Portfolio {
   status: "ACTIVE" | "PAUSED" | "CLOSED";
   max_position_pct: string;
   min_cash_pct: string;
+  auto_trade: boolean;
   created_at: string;
 }
 
@@ -161,7 +162,8 @@ export function setAdminKey(key: string | undefined): void {
   saveAdminKey(key);
 }
 
-// The dashboard never places orders or starts agent runs. Its only write is pause/resume.
+// The dashboard never places orders or starts agent runs. Its only writes are the
+// owner's pause/resume and auto-trade switches.
 async function request<T>(path: string, init: RequestInit = {}, key = adminKey): Promise<T> {
   const headers = new Headers(init.headers);
   if (key) headers.set("Authorization", `Bearer ${key}`);
@@ -197,5 +199,7 @@ export const api = {
   statusChanges: (id: string) => get<StatusChange[]>(`/portfolios/${id}/status-changes`),
   pause: (id: string, reason?: string) => post<Portfolio>(`/portfolios/${id}/pause`, { reason: reason || null }),
   resume: (id: string) => post<Portfolio>(`/portfolios/${id}/resume`, {}),
+  setAutoTrade: (id: string, enabled: boolean) =>
+    post<Portfolio>(`/portfolios/${id}/auto-trade`, { enabled }),
   checkAdminKey: (key: string) => request<void>("/admin/check", {}, key),
 };

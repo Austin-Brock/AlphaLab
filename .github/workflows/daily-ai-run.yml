@@ -1,0 +1,69 @@
+name: Daily AI run
+
+on:
+  schedule:
+    # 10:05 ET on weekdays. GitHub cron is UTC and ignores daylight saving, so fire at
+    # both 14:05 (EDT) and 15:05 (EST); the script waits for 10:00 ET and runs each
+    # portfolio at most once a day. Market holidays are skipped by the market-hours check.
+    - cron: "5 14 * * 1-5"
+    - cron: "5 15 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      portfolio:
+        description: "Portfolio ID (blank = every portfolio with auto-trade on)"
+        required: false
+        default: ""
+      check_only:
+        description: "Only check connections (database, market data, AWS); trade nothing"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  id-token: write # lets the job request short-lived AWS credentials (OIDC)
+
+concurrency:
+  group: daily-ai-run
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      ALPHALAB_DATABASE_URL: ${{ secrets.ALPHALAB_DATABASE_URL }}
+      ALPHALAB_ALPACA_API_KEY: ${{ secrets.ALPHALAB_ALPACA_API_KEY }}
+      ALPHALAB_ALPACA_SECRET_KEY: ${{ secrets.ALPHALAB_ALPACA_SECRET_KEY }}
+      # Credentials come from the assumed role below, not a named profile.
+      ALPHALAB_AWS_PROFILE: ""
+      ALPHALAB_AWS_EXPECTED_ROLE: AlphaLabBedrockGitHub
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+          role-session-name: alphalab-daily-run
+
+      - run: uv sync --no-dev --frozen
+
+      - name: Run the AI
+        env:
+          PORTFOLIO: ${{ inputs.portfolio }}
+          CHECK_ONLY: ${{ inputs.check_only }}
+        run: |
+          if [ "$CHECK_ONLY" = "true" ]; then
+            uv run python -m app.daily_run --check
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            uv run python -m app.daily_run --manual ${PORTFOLIO:+--portfolio "$PORTFOLIO"}
+          else
+            uv run python -m app.daily_run
+          fi

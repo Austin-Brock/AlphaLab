@@ -118,6 +118,22 @@ class PortfolioService:
     def resume(self, portfolio_id: uuid.UUID, reason: str | None = None) -> Portfolio:
         return self._set_status(portfolio_id, PortfolioStatus.ACTIVE, reason)
 
+    def set_auto_trade(self, portfolio_id: uuid.UUID, enabled: bool) -> Portfolio:
+        """Opt a portfolio in or out of the scheduled daily run."""
+        portfolio = self.get_portfolio(portfolio_id)
+        portfolio.auto_trade = enabled
+        self.session.commit()
+        return portfolio
+
+    def list_auto_trade_portfolios(self) -> list[Portfolio]:
+        return list(
+            self.session.scalars(
+                select(Portfolio)
+                .where(Portfolio.auto_trade.is_(True))
+                .order_by(Portfolio.created_at)
+            )
+        )
+
     def get_status_changes(self, portfolio_id: uuid.UUID) -> list[PortfolioStatusChange]:
         self.get_portfolio(portfolio_id)
         return list(
