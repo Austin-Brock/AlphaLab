@@ -17,25 +17,30 @@ class BedrockLLMClient:
 
     @classmethod
     def from_profile(
-        cls, model_id: str, profile: str, region: str, expected_role: str
+        cls, model_id: str, profile: str | None, region: str, expected_role: str
     ) -> "BedrockLLMClient":
         """Build a client, refusing to run under any role other than `expected_role`.
 
         This keeps AlphaLab from silently using broader credentials (e.g. an admin
-        profile from another project) if the environment is misconfigured.
+        profile from another project) if the environment is misconfigured. With no
+        profile, credentials come from the environment (e.g. GitHub Actions OIDC).
         """
+        source = f"AWS profile '{profile}'" if profile else "AWS credentials from the environment"
         try:
             session = boto3.Session(profile_name=profile, region_name=region)
             arn = session.client("sts").get_caller_identity()["Arn"]
         except (BotoCoreError, ClientError) as exc:
-            raise LLMUnavailableError(
-                f"Could not authenticate AWS profile '{profile}': {exc}. "
+            hint = (
                 f"If your SSO session expired, run: aws sso login --profile {profile}"
-            ) from exc
-        # Assumed SSO roles look like .../AWSReservedSSO_<PermissionSet>_<suffix>/<user>
+                if profile
+                else "Check that the job assumed its AWS role."
+            )
+            raise LLMUnavailableError(f"Could not authenticate {source}: {exc}. {hint}") from exc
+        # Assumed SSO roles look like .../AWSReservedSSO_<PermissionSet>_<suffix>/<user>;
+        # assumed IAM roles look like .../assumed-role/<RoleName>/<session>.
         if f"_{expected_role}_" not in arn and f"/{expected_role}/" not in arn:
             raise LLMUnavailableError(
-                f"AWS profile '{profile}' is running as {arn}, not the {expected_role} role. "
+                f"{source} is running as {arn}, not the {expected_role} role. "
                 "Refusing to use broader credentials."
             )
         runtime = session.client(

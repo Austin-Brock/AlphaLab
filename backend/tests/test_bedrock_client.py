@@ -84,3 +84,20 @@ def test_aws_errors_become_llm_unavailable():
     client = BedrockLLMClient("model-x", FakeRuntime(error))
     with pytest.raises(LLMUnavailableError, match="ThrottlingException"):
         client.converse("sys", [], [], 10)
+
+
+GITHUB_ROLE_ARN = "arn:aws:sts::637423355393:assumed-role/AlphaLabBedrockGitHub/GitHubActions"
+
+
+def test_environment_credentials_with_the_ci_role(monkeypatch):
+    session = FakeSession(GITHUB_ROLE_ARN)
+    monkeypatch.setattr(bedrock.boto3, "Session", session)
+    client = BedrockLLMClient.from_profile("m", None, "us-east-1", "AlphaLabBedrockGitHub")
+    assert client.model_id == "m"
+    assert session.profile is None
+
+
+def test_environment_credentials_must_still_match_the_role(monkeypatch):
+    monkeypatch.setattr(bedrock.boto3, "Session", FakeSession(ADMIN_ARN))
+    with pytest.raises(LLMUnavailableError, match="credentials from the environment"):
+        BedrockLLMClient.from_profile("m", None, "us-east-1", "AlphaLabBedrockGitHub")

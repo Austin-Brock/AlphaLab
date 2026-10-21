@@ -235,7 +235,7 @@ Introduce AWS Bedrock. *(Built on the Bedrock Converse API directly rather than 
 
 **Done when:** the application runs autonomously during market hours while its decisions are monitored through the dashboard.
 
-> **Progress:** The dashboard (React + TypeScript, Vite, in `frontend/`) covers the four display items. Pause/resume is built: paused portfolios reject every order and skip agent runs, every change is audited, and the dashboard has the switch. Scheduling is not built yet. Portfolio value is shown as of now; a value-over-time chart needs either stored daily snapshots or a replay of the ledger against daily closes.
+> **Progress:** The dashboard (React + TypeScript, Vite, in `frontend/`) covers the four display items. Pause/resume is built: paused portfolios reject every order and skip agent runs, every change is audited, and the dashboard has the switch. Scheduling runs as a GitHub Actions workflow (free, no server): portfolios opt in with an auto-trade switch, the job runs on weekday mornings at 10:00 ET at most once per day, and it reaches Bedrock through GitHub OIDC with a role limited to model invocation, so no AWS keys are stored. The public website itself has no AWS access. Portfolio value is shown as of now; a value-over-time chart needs either stored daily snapshots or a replay of the ledger against daily closes.
 
 ---
 

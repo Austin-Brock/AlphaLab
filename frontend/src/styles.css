@@ -584,3 +584,8 @@ button.danger:disabled {
   width: 200px;
   max-width: 100%;
 }
+.control-slim {
+  border-left-color: var(--accent);
+  padding-top: 10px;
+  padding-bottom: 10px;
+}

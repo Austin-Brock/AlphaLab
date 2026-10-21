@@ -92,6 +92,8 @@ class Portfolio(Base):
     # Risk limits, enforced by the risk engine on every order.
     max_position_pct: Mapped[Decimal] = mapped_column(Fraction, default=Decimal("0.10"))
     min_cash_pct: Mapped[Decimal] = mapped_column(Fraction, default=Decimal("0.05"))
+    # Opt-in: the scheduled daily run only trades portfolios with this switched on.
+    auto_trade: Mapped[bool] = mapped_column(default=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

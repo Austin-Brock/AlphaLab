@@ -1,0 +1,33 @@
+name: Migrate database
+
+# Applies new database migrations to the hosted database whenever one is merged.
+on:
+  push:
+    branches: [main]
+    paths: ["backend/alembic/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: migrate-database
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      ALPHALAB_DATABASE_URL: ${{ secrets.ALPHALAB_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - run: uv sync --no-dev --frozen
+      - run: uv run alembic upgrade head
+      - run: uv run alembic current
