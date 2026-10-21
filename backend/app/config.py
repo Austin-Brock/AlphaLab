@@ -5,7 +5,27 @@ from typing import Annotated
 from pydantic import AliasChoices, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
-DEFAULT_WATCHLIST = ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "JPM", "V", "SPY"]
+# About 50 large, heavily traded US companies across sectors, plus SPY.
+DEFAULT_WATCHLIST = [
+    # The original ten
+    "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA", "JPM", "V", "SPY",
+    # Technology
+    "AVGO", "ORCL", "CRM", "ADBE", "AMD", "CSCO", "QCOM",
+    # Consumer
+    "HD", "MCD", "NKE", "COST", "WMT", "PG", "KO", "PEP",
+    # Financials
+    "MA", "BAC", "GS", "WFC",
+    # Health care
+    "UNH", "JNJ", "LLY", "PFE", "MRK", "ABBV", "TMO",
+    # Energy
+    "XOM", "CVX", "COP",
+    # Industrials
+    "CAT", "BA", "GE", "HON", "UPS",
+    # Communication
+    "NFLX", "DIS", "T", "VZ",
+    # Utilities and materials
+    "NEE", "LIN",
+]  # fmt: skip
 
 
 class Settings(BaseSettings):

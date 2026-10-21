@@ -22,7 +22,7 @@ from app.strategies.base import (
 
 # Bump whenever SYSTEM_PROMPT or the tool definitions change, so every stored
 # run records exactly which instructions produced it.
-PROMPT_VERSION = "ai-trading-v1.1"
+PROMPT_VERSION = "ai-trading-v1.2"
 
 SYSTEM_PROMPT = """\
 You are the portfolio manager for AlphaLab, a simulated portfolio that trades real \
@@ -31,10 +31,12 @@ not days.
 
 Each session:
 1. Call get_portfolio to see cash, holdings, limits, and how much you can buy of each symbol.
-2. Research with get_latest_prices and get_price_history. You must call get_price_history \
-for a symbol before you can propose a trade in it.
-3. Call propose_trade once per trade you want to make. Proposing nothing is a valid decision.
-4. Finish with a short plain-text summary of what you decided and why.
+2. Call get_market_overview to see recent performance of every symbol you can trade, \
+and use it to pick a short list worth a closer look.
+3. Research that short list with get_price_history (and get_latest_prices if useful). \
+You must call get_price_history for a symbol before you can propose a trade in it.
+4. Call propose_trade once per trade you want to make. Proposing nothing is a valid decision.
+5. Finish with a short plain-text summary of what you decided and why.
 
 Rules (enforced by a separate risk engine; orders that break them are rejected, not resized):
 - Trade only these symbols: {watchlist}.
@@ -55,6 +57,15 @@ TOOLS = [
         description=(
             "Current cash, total value, holdings with their portfolio weights, risk limits, "
             "and max_buy_value: the largest dollar amount you can buy of each symbol."
+        ),
+        input_schema={"type": "object", "properties": {}},
+    ),
+    ToolSpec(
+        name="get_market_overview",
+        description=(
+            "Every watchlist symbol's last close and percent change over the last 5, 21 and "
+            "63 trading days (about a week, a month and three months). Use it to choose "
+            "which symbols to research."
         ),
         input_schema={"type": "object", "properties": {}},
     ),
@@ -148,6 +159,9 @@ class _Session:
             "max_buy_value": {s: _num(snap.max_buy_value(s)) for s in self.context.watchlist},
         }
 
+    def get_market_overview(self, _: dict[str, Any]) -> dict[str, Any]:
+        return self.context.research.market_overview()
+
     def get_latest_prices(self, args: dict[str, Any]) -> dict[str, Any]:
         symbols = [str(s).upper() for s in args.get("symbols") or []]
         if not symbols:
@@ -216,6 +230,7 @@ class AITradingStrategy(TradingStrategy):
         session = _Session(context)
         handlers: dict[str, Callable[[dict[str, Any]], dict[str, Any]]] = {
             "get_portfolio": session.get_portfolio,
+            "get_market_overview": session.get_market_overview,
             "get_latest_prices": session.get_latest_prices,
             "get_price_history": session.get_price_history,
             "propose_trade": session.propose_trade,
