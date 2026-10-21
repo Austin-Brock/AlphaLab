@@ -1,5 +1,8 @@
 """Portfolio value over time, compared with simply holding a benchmark (SPY).
 
+The comparison starts when the portfolio first trades, not when it was created,
+so days spent waiting in cash before the first trade don't count against it.
+
 The history is rebuilt from the recorded ledger and fills plus daily closing
 prices, so nothing extra is stored and it is complete back to the first day.
 """
@@ -30,7 +33,7 @@ class ValuePoint:
     date: date
     value: Decimal
     # What the starting capital would be worth if it had all bought the benchmark
-    # on the first day. None when no benchmark price is available.
+    # at the first point. None when no benchmark price is available.
     benchmark_value: Decimal | None
 
 
@@ -65,10 +68,10 @@ def build_history(
     benchmark: str,
     live: tuple[date, Mapping[str, Decimal]] | None = None,
 ) -> list[ValuePoint]:
-    """One point per trading day's close since the portfolio started.
+    """One point per trading day's close from `started` (the first day it traded).
 
-    The first point is the close before it started, when it was all cash: that is
-    where the benchmark is bought. `live` adds (or replaces) the latest day using
+    The first point is the close before that, when it was all cash: that is where
+    the benchmark is bought. `live` adds (or replaces) the latest day using
     current prices, so the last point matches the value shown on the dashboard.
     """
     days = sorted(closes.get(benchmark) or {d for c in closes.values() for d in c})
@@ -173,9 +176,11 @@ class PerformanceService:
             closes[symbol] = {eastern_date(b.timestamp): b.close for b in series.bars}
 
         held = {p.symbol for p in self.portfolios.get_positions(portfolio_id)}
+        # Before the first trade, only the starting point (the latest close) is shown.
+        started = fills[0].date if fills else eastern_date(end) + timedelta(days=1)
         points = build_history(
             portfolio.starting_capital,
-            eastern_date(portfolio.created_at),
+            started,
             cash_flows,
             fills,
             closes,
