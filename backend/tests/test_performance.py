@@ -123,6 +123,20 @@ def test_value_history_api(client, fake_market):
     assert last["benchmark_value"] == "1000000.0000"
 
 
+def test_value_history_starts_at_the_first_trade(client):
+    pid = create_portfolio(client)
+    # No trades yet: just the starting point at the latest close.
+    [point] = client.get(f"/portfolios/{pid}/value-history").json()["points"]
+    assert (point["value"], point["benchmark_value"]) == ("1000000.0000", "1000000.0000")
+
+    client.post(
+        f"/portfolios/{pid}/orders", json={"symbol": "AAPL", "side": "BUY", "quantity": 100}
+    )
+    first, *rest = client.get(f"/portfolios/{pid}/value-history").json()["points"]
+    assert first["value"] == "1000000.0000"
+    assert len(rest) >= 1
+
+
 def test_value_history_reuses_recent_daily_bars(client, fake_market):
     pid = create_portfolio(client)
     client.get(f"/portfolios/{pid}/value-history")

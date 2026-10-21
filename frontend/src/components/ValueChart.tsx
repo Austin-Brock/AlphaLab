@@ -40,8 +40,8 @@ function Chart({ history }: { history: ValueHistory }) {
   if (series.length < 2) {
     return (
       <p className="muted">
-        The chart fills in after the portfolio's first trading day closes, with {history.benchmark} alongside for
-        comparison.
+        The chart starts with the portfolio's first trade, next to the same money put into {history.benchmark} at
+        the same time.
       </p>
     );
   }
@@ -73,7 +73,7 @@ function Chart({ history }: { history: ValueHistory }) {
             <strong className={tone(returns.benchmark)}>{percent(returns.benchmark, { signed: true })}</strong>
           </span>
         )}
-        <span className="muted">Daily closes since {day(series[0].date)}</span>
+        <span className="muted">Daily closes since the first trade</span>
       </div>
 
       <div className="chart" ref={ref}>

@@ -13,7 +13,7 @@ AlphaLab starts an AI-managed portfolio with **$1,000,000 in simulated cash** an
 Anyone can view the live dashboard. It shows, for each portfolio:
 
 - **Value and total return** against the starting capital, and how the money is allocated
-- **Value over time,** day by day, next to what the same money would be worth simply held in SPY (an S&P 500 fund)
+- **Value over time,** day by day, from the first trade, next to what the same money would be worth simply held in SPY (an S&P 500 fund)
 - **Positions** with unrealized gains and losses
 - **AI decisions:** every run's summary, each proposed trade with the AI's reasoning and what the risk engine did with it, and the full record of what the AI looked at
 - **Trade history,** including every risk check on every order
