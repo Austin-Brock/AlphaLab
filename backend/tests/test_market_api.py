@@ -5,13 +5,13 @@ from app.models import Position
 
 
 def test_milestone_2_definition_of_done(client):
-    """Retrieve prices for 10 selected securities."""
+    """Retrieve prices for the selected securities (10 at Milestone 2, now 50)."""
     assert client.get("/market/watchlist").json() == DEFAULT_WATCHLIST
 
     body = client.get("/market/prices").json()
 
     assert [p["symbol"] for p in body["prices"]] == DEFAULT_WATCHLIST
-    assert len(body["prices"]) == 10
+    assert len(body["prices"]) == 50
     assert body["prices"][0]["price"] == "100.0000"
     assert body["prices"][0]["fetched_at"]
     assert body["prices"][0]["price_time"]

@@ -217,3 +217,22 @@ def test_research_tools_summarize_history_and_enforce_watchlist(session, market)
     assert tools.latest_prices(["AAPL"])["prices"]["AAPL"]["price"] == 100.0
     with pytest.raises(ValueError, match="watchlist"):
         tools.latest_prices(["GME"])
+
+
+def test_market_overview_summarizes_every_watchlist_symbol(session, market, provider):
+    tools = MarketResearchTools(session, market, [*WATCHLIST, "SPY"])
+
+    overview = tools.market_overview()
+
+    assert overview["missing"] == ["SPY"]  # the fake has no SPY price
+    assert list(overview["symbols"]) == WATCHLIST
+    assert overview["symbols"]["MSFT"] == {
+        "last_close": 400.0,
+        "change_5d_pct": 0.0,
+        "change_1m_pct": 0.0,
+        "change_3m_pct": 0.0,
+    }
+    calls = provider.bar_calls
+    tools.market_overview()
+    # Cached symbols are reused; only SPY, which had nothing to cache, is asked for again.
+    assert provider.bar_calls == calls + 1

@@ -29,6 +29,10 @@ class FakeResearch:
         self.calls.append(("price_history", symbol, days))
         return {"symbol": symbol, "days": days, "change_pct": 5.0}
 
+    def market_overview(self):
+        self.calls.append(("market_overview",))
+        return {"symbols": {"AAPL": {"last_close": 100.0, "change_1m_pct": 5.0}}, "missing": []}
+
 
 def snapshot(**overrides) -> PortfolioSnapshot:
     base = dict(
@@ -232,3 +236,15 @@ def test_failed_price_history_does_not_count_as_research(research):
     llm = FakeLLM([history("AAPL"), propose("AAPL", "SELL", 10), final("Held.")])
     result = AITradingStrategy(llm).generate_proposals(context(research))
     assert result.proposals == []
+
+
+def test_market_overview_tool_screens_without_counting_as_research(research):
+    llm = FakeLLM([tool_call("get_market_overview"), propose("AAPL", "BUY", 10), final("Done.")])
+    result = AITradingStrategy(llm).generate_proposals(context(research))
+
+    overview = result.transcript[2]["content"][0]["toolResult"]["content"][0]["json"]
+    assert overview["symbols"]["AAPL"]["change_1m_pct"] == 5.0
+    # The overview alone isn't enough to trade: price history is still required.
+    assert result.proposals == []
+    error = result.transcript[4]["content"][0]["toolResult"]["content"][0]["json"]["error"]
+    assert "get_price_history" in error

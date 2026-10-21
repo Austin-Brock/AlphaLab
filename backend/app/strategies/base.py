@@ -88,6 +88,8 @@ class ResearchTools(Protocol):
 
     def price_history(self, symbol: str, days: int) -> dict[str, Any]: ...
 
+    def market_overview(self) -> dict[str, Any]: ...
+
 
 @dataclass(frozen=True)
 class StrategyContext:

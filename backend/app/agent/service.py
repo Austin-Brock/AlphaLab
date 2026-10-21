@@ -29,6 +29,19 @@ from app.strategies.base import (
 from app.trading.service import TradingService
 
 WEIGHT_PLACES = Decimal("0.0001")
+# Market overview: about three months of daily closes, summarized per symbol.
+OVERVIEW_DAYS = 100
+OVERVIEW_WINDOWS = [("5d", 5), ("1m", 21), ("3m", 63)]
+# Closes change once a day; reuse bars fetched in the last hour.
+OVERVIEW_MAX_AGE = timedelta(hours=1)
+
+
+def _change(closes: list[Decimal], sessions: int) -> float | None:
+    """Percent change over the last `sessions` trading days, if there's enough history."""
+    if len(closes) <= sessions:
+        return None
+    then = closes[-1 - sessions]
+    return round(float((closes[-1] - then) / then * 100), 2)
 
 
 class UnknownStrategyError(Exception):
@@ -44,6 +57,7 @@ class MarketResearchTools:
         self.session = session
         self.market = market
         self.watchlist = set(watchlist)
+        self.watchlist_order = list(watchlist)
 
     def latest_prices(self, symbols: Sequence[str]) -> dict[str, Any]:
         self._check(symbols)
@@ -89,6 +103,38 @@ class MarketResearchTools:
             ],
             "stale": series.stale,
         }
+
+    def market_overview(self) -> dict[str, Any]:
+        """Recent performance of every watchlist symbol in one call, for screening.
+
+        Lets the model pick a few symbols to research in depth instead of pulling
+        the full history of each one, which keeps runs small as the watchlist grows.
+        """
+        end = self.market.now()
+        start = end - timedelta(days=OVERVIEW_DAYS)
+        rows, missing = {}, []
+        try:
+            for symbol in self.watchlist_order:
+                try:
+                    bars = self.market.get_bars(
+                        symbol, Timeframe.DAY_1, start, end, max_age=OVERVIEW_MAX_AGE
+                    ).bars
+                except MarketDataUnavailableError:
+                    bars = []
+                if not bars:
+                    missing.append(symbol)
+                    continue
+                closes = [b.close for b in bars]
+                rows[symbol] = {
+                    "last_close": float(closes[-1]),
+                    **{
+                        f"change_{label}_pct": _change(closes, sessions)
+                        for label, sessions in OVERVIEW_WINDOWS
+                    },
+                }
+        finally:
+            self._end_read()
+        return {"symbols": rows, "missing": missing}
 
     def _check(self, symbols: Sequence[str]) -> None:
         outside = [s for s in symbols if s not in self.watchlist]
