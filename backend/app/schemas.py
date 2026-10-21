@@ -1,7 +1,7 @@
 """API request/response models. Decimals serialize as JSON strings to avoid float rounding."""
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -98,6 +98,23 @@ class PortfolioValueOut(BaseModel):
     positions_value: Decimal
     total_value: Decimal
     positions: list[PositionValuationOut]
+
+
+class ValuePointOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    date: date
+    value: Decimal
+    benchmark_value: Decimal | None
+
+
+class ValueHistoryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    portfolio_id: uuid.UUID
+    benchmark: str
+    points: list[ValuePointOut]
+    stale: bool
 
 
 class PriceSnapshotOut(BaseModel):
