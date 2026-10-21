@@ -15,8 +15,18 @@ from sqlalchemy.orm import Session
 
 from app.llm.client import LLMUnavailableError
 from app.market_data.provider import MarketDataUnavailableError, Timeframe
-from app.models import AgentDecision, AgentRun, AgentRunStatus, OrderSide, PortfolioStatus
+from app.models import (
+    AgentDecision,
+    AgentRun,
+    AgentRunStatus,
+    Execution,
+    Order,
+    OrderSide,
+    OrderStatus,
+    PortfolioStatus,
+)
 from app.services.market_data import MarketDataService
+from app.services.performance import PerformanceService, eastern_date
 from app.services.portfolio import PortfolioService
 from app.strategies.base import (
     HoldingSnapshot,
@@ -34,6 +44,25 @@ OVERVIEW_DAYS = 100
 OVERVIEW_WINDOWS = [("5d", 5), ("1m", 21), ("3m", 63)]
 # Closes change once a day; reuse bars fetched in the last hour.
 OVERVIEW_MAX_AGE = timedelta(hours=1)
+# Memory: how many earlier runs a strategy is shown, and how much of each text.
+MEMORY_RUNS = 5
+MEMORY_TEXT_CHARS = 600
+
+
+def _clip(text: str | None, limit: int = MEMORY_TEXT_CHARS) -> str | None:
+    if text is None or len(text) <= limit:
+        return text
+    return text[: limit - 1].rstrip() + "…"
+
+
+def _outcome(order: Order | None) -> str:
+    if order is None:
+        return "not submitted"
+    if order.status is OrderStatus.FILLED and order.execution:
+        return f"filled at {order.execution.price:.2f}"
+    if order.status is OrderStatus.REJECTED:
+        return f"rejected: {order.rejection_reason}"
+    return order.status.value.lower()
 
 
 def _change(closes: list[Decimal], sessions: int) -> float | None:
@@ -156,6 +185,7 @@ class AgentRunService:
         watchlist: Sequence[str],
         max_proposals: int = 5,
         require_market_open: bool = True,
+        benchmark: str = "SPY",
     ):
         self.session = session
         self.market = market
@@ -164,6 +194,7 @@ class AgentRunService:
         self.watchlist = list(watchlist)
         self.max_proposals = max_proposals
         self.require_market_open = require_market_open
+        self.benchmark = benchmark
         self.portfolios = PortfolioService(session)
 
     def run(self, portfolio_id: uuid.UUID, run_key: str | None = None) -> AgentRun:
@@ -201,11 +232,16 @@ class AgentRunService:
             )
             return self._finish(run, AgentRunStatus.SKIPPED, summary=reason)
 
+        memory = self._memory(portfolio_id, run.id, snapshot)
+        # Stored with the snapshot, so the run still shows everything the strategy knew.
+        run.input_snapshot = {**run.input_snapshot, "memory": memory}
+        self.session.commit()
         context = StrategyContext(
             snapshot=snapshot,
             watchlist=self.watchlist,
             max_proposals=self.max_proposals,
             research=MarketResearchTools(self.session, self.market, self.watchlist),
+            memory=memory,
         )
         try:
             result = strategy.generate_proposals(context)
@@ -308,6 +344,125 @@ class AgentRunService:
             prices={s: prices[s] for s in self.watchlist if s in prices},
         )
 
+    def _memory(
+        self, portfolio_id: uuid.UUID, current_run_id: uuid.UUID, snapshot: PortfolioSnapshot
+    ) -> dict[str, Any]:
+        """What the strategy should know from earlier runs: recent decisions and how
+        they turned out, why it holds what it holds, how it's doing against the
+        benchmark, and the notes the last run left. Empty parts are left out."""
+        runs = list(
+            self.session.scalars(
+                select(AgentRun)
+                .where(
+                    AgentRun.portfolio_id == portfolio_id,
+                    AgentRun.id != current_run_id,
+                    AgentRun.status == AgentRunStatus.COMPLETED,
+                )
+                .order_by(AgentRun.started_at.desc())
+                .limit(MEMORY_RUNS)
+            )
+        )
+        recent_runs = [
+            {
+                "date": eastern_date(r.started_at).isoformat(),
+                "summary": _clip(r.summary),
+                "trades": [
+                    {
+                        "symbol": d.symbol,
+                        "side": d.side.value,
+                        "quantity": float(d.quantity),
+                        "result": _outcome(d.order),
+                    }
+                    for d in r.decisions
+                ],
+            }
+            for r in runs
+        ]
+        noted = next((r for r in runs if r.notes), None)
+        memory: dict[str, Any] = {
+            "notes_from_last_session": {
+                "date": eastern_date(noted.started_at).isoformat(),
+                "notes": noted.notes,
+            }
+            if noted
+            else None,
+            "recent_sessions": recent_runs,
+            "holdings": self._holding_context(portfolio_id, snapshot),
+            "performance": self._performance(portfolio_id),
+        }
+        return {k: v for k, v in memory.items() if v}
+
+    def _holding_context(
+        self, portfolio_id: uuid.UUID, snapshot: PortfolioSnapshot
+    ) -> list[dict[str, Any]]:
+        """When each current position was opened, its gain, and the last reason given to buy."""
+        if not snapshot.holdings:
+            return []
+        opened: dict[str, datetime] = {}
+        held: dict[str, Decimal] = {}
+        for e in self.session.scalars(
+            select(Execution)
+            .where(Execution.portfolio_id == portfolio_id)
+            .order_by(Execution.executed_at)
+        ):
+            before = held.get(e.symbol, Decimal("0"))
+            held[e.symbol] = before + (e.quantity if e.side is OrderSide.BUY else -e.quantity)
+            if before <= 0 < held[e.symbol]:
+                opened[e.symbol] = e.executed_at
+
+        reasons: dict[str, AgentDecision] = {}
+        for d in self.session.scalars(
+            select(AgentDecision)
+            .join(Order, AgentDecision.order_id == Order.id)
+            .where(
+                AgentDecision.portfolio_id == portfolio_id,
+                AgentDecision.side == OrderSide.BUY,
+                Order.status == OrderStatus.FILLED,
+            )
+            .order_by(Order.created_at.desc())
+        ):
+            reasons.setdefault(d.symbol, d)
+
+        today = eastern_date(snapshot.as_of)
+        rows = []
+        for h in snapshot.holdings:
+            row: dict[str, Any] = {
+                "symbol": h.symbol,
+                "gain_pct": round(float((h.price / h.average_cost - 1) * 100), 2)
+                if h.average_cost
+                else None,
+            }
+            if h.symbol in opened:
+                since = eastern_date(opened[h.symbol])
+                row |= {"held_since": since.isoformat(), "days_held": (today - since).days}
+            if decision := reasons.get(h.symbol):
+                row |= {
+                    "last_buy_date": eastern_date(decision.order.created_at).isoformat(),
+                    "last_buy_reason": _clip(decision.rationale),
+                }
+            rows.append(row)
+        return rows
+
+    def _performance(self, portfolio_id: uuid.UUID) -> dict[str, Any] | None:
+        """Return since the first trade, next to the benchmark over the same days."""
+        points = (
+            PerformanceService(self.session, self.market, self.benchmark)
+            .value_history(portfolio_id)
+            .points
+        )
+        if len(points) < 2:
+            return None
+        first, last = points[0], points[-1]
+        result: dict[str, Any] = {
+            "since": first.date.isoformat(),
+            "return_pct": round(float((last.value / first.value - 1) * 100), 2),
+        }
+        if first.benchmark_value and last.benchmark_value:
+            result[f"{self.benchmark}_return_pct"] = round(
+                float((last.benchmark_value / first.benchmark_value - 1) * 100), 2
+            )
+        return result
+
     def _record_result(self, run: AgentRun, result: StrategyResult | None) -> None:
         if result is None:
             return
@@ -316,6 +471,7 @@ class AgentRunService:
         run.transcript = result.transcript
         run.input_tokens = result.input_tokens
         run.output_tokens = result.output_tokens
+        run.notes = result.notes
 
     def _finish(
         self,

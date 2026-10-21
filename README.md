@@ -32,7 +32,9 @@ The AI **proposes**; the risk and execution engines **decide**. Portfolio accoun
 
 Each run, the model works from a watchlist of about 50 large US companies across sectors, plus SPY. It has five tools — see the portfolio, a market overview of how every watchlist stock has moved over the last week, month and three months, get latest prices, get price history, and propose a trade. It screens with the overview, then studies a short list in detail: it must look at a stock's price history before it can propose trading it, and it can make at most 5 proposals per run. Proposals are never executed by the AI: each one becomes an ordinary order that goes through the risk engine.
 
-Every run is stored in full: the portfolio snapshot the AI saw, the model and prompt version, the complete conversation including every tool call, and each proposal linked to the order it became.
+It also has a **memory** of earlier runs on the same portfolio: the notes it left itself last time (its plan and what it's watching), its last five runs and how each trade turned out, why it bought each stock it holds and how that stock has done since, and its return against SPY since its first trade. It's told to treat this as context rather than a commitment, and to change course when the data changes. At the end of each run it writes new notes for the next one, shown on the dashboard.
+
+Every run is stored in full: the portfolio snapshot and memory the AI saw, the model and prompt version, the complete conversation including every tool call, and each proposal linked to the order it became.
 
 ### Risk checks
 

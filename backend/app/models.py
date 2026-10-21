@@ -287,6 +287,8 @@ class AgentRun(Base):
     # The full model conversation: every tool call, tool result, and reply.
     transcript: Mapped[list | None] = mapped_column(JSONB)
     summary: Mapped[str | None] = mapped_column(Text)
+    # What the run wants its next run on this portfolio to know (its plan, what it's watching).
+    notes: Mapped[str | None] = mapped_column(Text)
     error: Mapped[str | None] = mapped_column(Text)
     input_tokens: Mapped[int] = mapped_column(default=0)
     output_tokens: Mapped[int] = mapped_column(default=0)

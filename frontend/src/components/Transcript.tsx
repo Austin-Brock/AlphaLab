@@ -31,7 +31,7 @@ export function TranscriptView({ run }: { run: AgentRun }) {
   return (
     <div className="transcript">
       <details>
-        <summary>Portfolio snapshot the AI was given</summary>
+        <summary>Portfolio snapshot and memory the AI was given</summary>
         <pre>{JSON.stringify(run.input_snapshot, null, 2)}</pre>
       </details>
       {(run.transcript ?? []).map((message, i) =>

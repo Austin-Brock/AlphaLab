@@ -22,12 +22,18 @@ from app.strategies.base import (
 
 # Bump whenever SYSTEM_PROMPT or the tool definitions change, so every stored
 # run records exactly which instructions produced it.
-PROMPT_VERSION = "ai-trading-v1.2"
+PROMPT_VERSION = "ai-trading-v1.3"
 
 SYSTEM_PROMPT = """\
 You are the portfolio manager for AlphaLab, a simulated portfolio that trades real \
 US stocks with simulated money. Your goal is strong risk-adjusted returns over months, \
 not days.
+
+The first message includes your memory from earlier sessions on this portfolio, when \
+there are any: the notes you left last time, recent sessions and how their trades turned \
+out, why you bought what you hold and how it has done, and your return since your first \
+trade next to simply holding the benchmark. Treat it as context, not a commitment: \
+check whether each earlier reason still holds, and change course when the data has changed.
 
 Each session:
 1. Call get_portfolio to see cash, holdings, limits, and how much you can buy of each symbol.
@@ -36,7 +42,9 @@ and use it to pick a short list worth a closer look.
 3. Research that short list with get_price_history (and get_latest_prices if useful). \
 You must call get_price_history for a symbol before you can propose a trade in it.
 4. Call propose_trade once per trade you want to make. Proposing nothing is a valid decision.
-5. Finish with a short plain-text summary of what you decided and why.
+5. Call save_notes with a short plan for your next session: what you are watching, and \
+what would make you buy, sell or hold. Your next session sees these notes.
+6. Finish with a short plain-text summary of what you decided and why.
 
 Rules (enforced by a separate risk engine; orders that break them are rejected, not resized):
 - Trade only these symbols: {watchlist}.
@@ -50,6 +58,8 @@ max_buy_value that get_portfolio reports.
 Base every decision on the data the tools return. In each proposal's rationale, cite \
 the specific numbers that drove it.
 """
+
+MAX_NOTES_CHARS = 1000
 
 TOOLS = [
     ToolSpec(
@@ -94,6 +104,19 @@ TOOLS = [
         },
     ),
     ToolSpec(
+        name="save_notes",
+        description=(
+            "Leave notes for your next session on this portfolio, such as what you are "
+            "watching and the conditions for your next move. Calling it again replaces "
+            f"the notes. At most {MAX_NOTES_CHARS} characters."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {"notes": {"type": "string"}},
+            "required": ["notes"],
+        },
+    ),
+    ToolSpec(
         name="propose_trade",
         description=(
             "Propose one trade. Requires a get_price_history call for the symbol first. It is "
@@ -132,6 +155,7 @@ class _Session:
     proposals: list[TradeProposal] = field(default_factory=list)
     # Symbols whose price history the model has pulled this session.
     researched: set[str] = field(default_factory=set)
+    notes: str | None = None
 
     def get_portfolio(self, _: dict[str, Any]) -> dict[str, Any]:
         snap = self.context.snapshot
@@ -177,6 +201,17 @@ class _Session:
         history = self.context.research.price_history(symbol, max(5, min(days, 365)))
         self.researched.add(symbol)
         return history
+
+    def save_notes(self, args: dict[str, Any]) -> dict[str, Any]:
+        notes = str(args.get("notes", "")).strip()
+        if not notes:
+            raise ToolInputError("notes must not be empty")
+        if len(notes) > MAX_NOTES_CHARS:
+            raise ToolInputError(
+                f"Notes are {len(notes)} characters; keep them under {MAX_NOTES_CHARS}."
+            )
+        self.notes = notes
+        return {"saved": True}
 
     def propose_trade(self, args: dict[str, Any]) -> dict[str, Any]:
         if len(self.proposals) >= self.context.max_proposals:
@@ -234,6 +269,7 @@ class AITradingStrategy(TradingStrategy):
             "get_latest_prices": session.get_latest_prices,
             "get_price_history": session.get_price_history,
             "propose_trade": session.propose_trade,
+            "save_notes": session.save_notes,
         }
         system = SYSTEM_PROMPT.format(
             watchlist=", ".join(context.watchlist),
@@ -250,7 +286,8 @@ class AITradingStrategy(TradingStrategy):
                         "text": f"It is {context.snapshot.as_of:%Y-%m-%d %H:%M} UTC and the US "
                         f"market is {market}. Review the portfolio and decide which trades, "
                         "if any, to make."
-                    }
+                    },
+                    {"text": self._memory_text(context.memory)},
                 ],
             }
         ]
@@ -273,6 +310,7 @@ class AITradingStrategy(TradingStrategy):
                 messages.append(
                     {"role": "user", "content": [self._run_tool(handlers, t) for t in tool_uses]}
                 )
+                result.notes = session.notes
                 continue
             if response.stop_reason == "end_turn":
                 result.summary = "\n".join(
@@ -282,6 +320,12 @@ class AITradingStrategy(TradingStrategy):
             raise StrategyError(f"Model stopped unexpectedly ({response.stop_reason})", result)
 
         raise StrategyError(f"Model did not finish within {self.max_turns} turns", result)
+
+    @staticmethod
+    def _memory_text(memory: dict[str, Any]) -> str:
+        if not memory:
+            return "This is your first session on this portfolio, so there is no memory yet."
+        return "Your memory from earlier sessions (JSON):\n" + json.dumps(memory, default=str)
 
     @staticmethod
     def _run_tool(

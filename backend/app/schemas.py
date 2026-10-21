@@ -242,6 +242,7 @@ class AgentRunSummaryOut(BaseModel):
     model_id: str | None
     prompt_version: str | None
     summary: str | None
+    notes: str | None
     error: str | None
     input_tokens: int
     output_tokens: int

@@ -97,6 +97,9 @@ class StrategyContext:
     watchlist: list[str]
     max_proposals: int
     research: ResearchTools
+    # What the strategy should know from earlier runs on this portfolio (see
+    # AgentRunService._memory). Stored with the run, like the snapshot.
+    memory: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -109,6 +112,8 @@ class StrategyResult:
     transcript: list[dict[str, Any]] = field(default_factory=list)
     input_tokens: int = 0
     output_tokens: int = 0
+    # Left for the next run on this portfolio.
+    notes: str | None = None
 
 
 class StrategyError(Exception):

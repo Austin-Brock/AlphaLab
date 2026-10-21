@@ -416,6 +416,16 @@ table.clickable tbody tr:not(.detail-row):hover td {
   margin-top: 4px !important;
   color: var(--text);
 }
+.run-notes {
+  margin: 8px 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--accent);
+  background: var(--surface-2);
+  border-radius: 0 8px 8px 0;
+}
+.run-notes p {
+  margin: 2px 0 0;
+}
 
 .order-detail p {
   margin: 0 0 6px;

@@ -121,6 +121,7 @@ def get_agent_service(
         watchlist=settings.watchlist,
         max_proposals=settings.agent_max_proposals,
         require_market_open=execution.enforce_market_hours,
+        benchmark=settings.benchmark_symbol,
     )
 
 
