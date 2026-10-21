@@ -1,4 +1,4 @@
-from datetime import UTC, datetime, time
+from datetime import UTC, datetime, time, timedelta
 from decimal import Decimal
 
 import pytest
@@ -69,7 +69,7 @@ def test_runs_at_most_once_per_day(session, market, portfolios):
     second = run_daily(session, agent, AFTER_TEN.replace(hour=15), TEN)
 
     assert second.runs[0].id == first.runs[0].id
-    assert len(llm.calls) == 3
+    assert len(llm.calls) == 4  # three scripted turns plus the notes reminder
     assert len(portfolios.get_positions(p.id)) == 1
 
 
@@ -160,3 +160,37 @@ def test_auto_trade_switch_is_owner_only(client, visitor):
     response = client.post(f"/portfolios/{pid}/auto-trade", json={"enabled": True})
     assert response.json()["auto_trade"] is True
     assert visitor.get(f"/portfolios/{pid}").json()["auto_trade"] is True
+
+
+def test_a_manual_run_counts_as_the_days_run(session, market, portfolios):
+    p = portfolios.create_portfolio("On", Decimal("1000000"), "ai-trading-v1")
+    portfolios.set_auto_trade(p.id, True)
+    llm = buying_llm()
+    agent = agent_with(session, market, llm)
+    [manual] = run_daily(
+        session, agent, AFTER_TEN, TEN, manual=True, portfolio_id=p.id, manual_key="1"
+    ).runs
+    manual.started_at = AFTER_TEN
+    session.commit()
+    calls = len(llm.calls)
+
+    later = run_daily(session, agent, AFTER_TEN.replace(hour=15), TEN)
+
+    assert later.runs == []
+    assert later.already_ran == [f"{p.id}: already ran today (manual:1)"]
+    assert not later.failed
+    assert len(llm.calls) == calls
+
+
+def test_a_manual_run_yesterday_does_not_block_today(session, market, portfolios):
+    p = portfolios.create_portfolio("On", Decimal("1000000"), "ai-trading-v1")
+    portfolios.set_auto_trade(p.id, True)
+    agent = agent_with(session, market, buying_llm())
+    [manual] = run_daily(
+        session, agent, AFTER_TEN, TEN, manual=True, portfolio_id=p.id, manual_key="1"
+    ).runs
+    manual.started_at = AFTER_TEN - timedelta(days=1)
+    session.commit()
+
+    [run] = run_daily(session, agent_with(session, market, buying_llm()), AFTER_TEN, TEN).runs
+    assert run.run_key == "daily:2026-10-20"

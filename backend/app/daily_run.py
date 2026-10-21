@@ -9,7 +9,8 @@ Run by the GitHub Actions workflow on trading-day mornings, or by hand:
 
 Scheduled runs wait until `daily_run_after` (US Eastern) and use the run key
 `daily:<date>`, so however often the job fires, each portfolio runs at most once
-per day. Market hours and pause/resume are still enforced by the agent runner.
+per day. A scheduled run also skips a portfolio that already completed a manual
+run that day. Market hours and pause/resume are still enforced by the agent runner.
 Exits non-zero if any run failed, so the failure shows up in GitHub.
 """
 
@@ -19,9 +20,10 @@ import sys
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.agent.service import AgentRunService
@@ -42,6 +44,8 @@ class DailyRunResult:
     errors: list[str] = field(default_factory=list)
     # Set when the run was skipped before looking at any portfolio.
     not_yet: str | None = None
+    # Portfolios skipped because they already completed a run today.
+    already_ran: list[str] = field(default_factory=list)
 
     @property
     def failed(self) -> bool:
@@ -70,6 +74,9 @@ def run_daily(
     run_key = f"manual:{manual_key or uuid.uuid4()}" if manual else f"daily:{local.date()}"
     result = DailyRunResult([])
     for portfolio in targets:
+        if not manual and (earlier := _completed_today(session, portfolio.id, local, run_key)):
+            result.already_ran.append(f"{portfolio.id}: already ran today ({earlier.run_key})")
+            continue
         # One portfolio's failure shouldn't stop the others.
         try:
             result.runs.append(agent.run(portfolio.id, run_key=run_key))
@@ -77,6 +84,22 @@ def run_daily(
             session.rollback()
             result.errors.append(f"{portfolio.id}: {exc}")
     return result
+
+
+def _completed_today(
+    session: Session, portfolio_id: uuid.UUID, local: datetime, run_key: str
+) -> AgentRun | None:
+    """Another completed run on this portfolio today (US Eastern), e.g. one started by hand."""
+    start = datetime.combine(local.date(), time(0), EASTERN)
+    return session.scalar(
+        select(AgentRun).where(
+            AgentRun.portfolio_id == portfolio_id,
+            AgentRun.status == AgentRunStatus.COMPLETED,
+            AgentRun.run_key != run_key,
+            AgentRun.started_at >= start,
+            AgentRun.started_at < start + timedelta(days=1),
+        )
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -116,8 +139,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if result.not_yet:
         print(result.not_yet)
-    elif not result.runs:
+    elif not result.runs and not result.already_ran:
         print("No portfolios have auto-trade switched on.")
+    for skipped in result.already_ran:
+        print(f"SKIPPED {skipped}")
     for error in result.errors:
         print(f"ERROR {error}")
     for run in result.runs:

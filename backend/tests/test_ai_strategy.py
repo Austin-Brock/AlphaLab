@@ -79,6 +79,7 @@ def test_full_session_produces_proposals_and_a_transcript(research):
             tool_call("get_portfolio"),
             tool_call("get_price_history", {"symbol": "msft", "days": 90}),
             propose("MSFT", "BUY", 200, "Up 5% over 90 days", n=1),
+            tool_call("save_notes", {"notes": "Add to MSFT if the trend holds."}),
             final("Bought MSFT on momentum."),
         ]
     )
@@ -92,10 +93,11 @@ def test_full_session_produces_proposals_and_a_transcript(research):
     assert proposal.rationale == "Up 5% over 90 days"
     assert result.summary == "Bought MSFT on momentum."
     assert (result.model_id, result.prompt_version) == ("fake-model", PROMPT_VERSION)
-    assert (result.input_tokens, result.output_tokens) == (400, 80)
+    assert (result.input_tokens, result.output_tokens) == (500, 100)
+    assert result.notes == "Add to MSFT if the trend holds."
     assert research.calls == [("price_history", "MSFT", 90)]
-    # user kickoff + 4 assistant turns + 3 tool-result turns
-    assert len(result.transcript) == 8
+    # user kickoff + 5 assistant turns + 4 tool-result turns; no reminders needed
+    assert len(result.transcript) == 10
     assert result.transcript[-1] == {"role": "assistant", "content": [{"text": result.summary}]}
 
 
@@ -287,3 +289,44 @@ def test_memory_is_shown_in_the_first_message(research):
     text = llm.calls[0]["messages"][0]["content"][1]["text"]
     assert "Watch AMD." in text
     assert "context, not a commitment" in llm.calls[0]["system"]
+
+
+def test_trade_written_as_text_is_pointed_out_once(research):
+    llm = FakeLLM(
+        [
+            history("MSFT"),
+            final('```json\n{"symbol": "MSFT", "side": "BUY", "quantity": 5}\n```'),
+            propose("MSFT", "BUY", 5),
+            tool_call("save_notes", {"notes": "Watch MSFT."}),
+            final("Bought MSFT."),
+        ]
+    )
+    result = AITradingStrategy(llm).generate_proposals(context(research))
+
+    [proposal] = result.proposals
+    assert proposal.symbol == "MSFT"
+    assert result.summary == "Bought MSFT."
+    nudge = result.transcript[4]
+    assert nudge["role"] == "user" and "propose_trade tool" in nudge["content"][0]["text"]
+
+
+def test_missing_notes_get_one_reminder_and_the_summary_is_kept(research):
+    llm = FakeLLM(
+        [final("Held: nothing looked strong."), tool_call("save_notes", {"notes": "Watch AMD."})]
+    )
+    result = AITradingStrategy(llm).generate_proposals(context(research))
+    assert result.notes == "Watch AMD."
+    assert result.summary == "Held: nothing looked strong."
+
+
+def test_the_notes_reminder_is_not_repeated(research):
+    llm = FakeLLM([final("Held."), final("Done.")])
+    result = AITradingStrategy(llm).generate_proposals(context(research))
+    assert (result.summary, result.notes) == ("Held.", None)
+    assert len(llm.calls) == 2
+
+
+def test_prompt_says_there_is_no_news(research):
+    llm = FakeLLM([final("Held.")])
+    AITradingStrategy(llm).generate_proposals(context(research))
+    assert "no news" in llm.calls[0]["system"]

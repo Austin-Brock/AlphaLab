@@ -87,7 +87,8 @@ class FakeLLM:
         self.calls.append({"system": system, "messages": [dict(m) for m in messages]})
         if self.error:
             raise self.error
-        turn = self.turns.pop(0)
+        # Once the script runs out, acknowledge (e.g. the reminder to save notes).
+        turn = self.turns.pop(0) if self.turns else final("Done.")
         return LLMResponse(
             message={"role": "assistant", "content": turn["content"]},
             stop_reason=turn["stop"],

@@ -54,7 +54,7 @@ Approved orders fill at the latest market price plus 0.05% slippage (buys pay mo
 
 ### Daily runs
 
-Portfolios with **auto-trade** switched on are traded automatically once each trading day, around 10am US Eastern, by a scheduled GitHub Actions job. Each portfolio runs at most once a day; weekends, market holidays and paused portfolios are skipped. Every run appears on the dashboard like any other.
+Portfolios with **auto-trade** switched on are traded automatically once each trading day, around 10am US Eastern, by a scheduled GitHub Actions job. Each portfolio runs at most once a day, and a run started by hand counts as that day's run; weekends, market holidays and paused portfolios are skipped. Every run appears on the dashboard like any other.
 
 ### Pause and resume
 
