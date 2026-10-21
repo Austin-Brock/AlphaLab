@@ -63,3 +63,25 @@ def test_manual_portfolio_cannot_run_the_agent(client):
     response = client.post(f"/portfolios/{pid}/agent-runs")
     assert response.status_code == 422
     assert "ai-trading-v1" in response.json()["detail"]
+
+
+def test_memory_includes_performance_and_notes_reach_the_api(client, fake_llm):
+    pid = create_portfolio(client)
+    fake_llm.turns = [
+        history("AAPL"),
+        propose("AAPL", "BUY", 100, "Momentum", n=1),
+        tool_call("save_notes", {"notes": "Hold AAPL while above $95."}),
+        final("Bought AAPL."),
+    ]
+    first = client.post(f"/portfolios/{pid}/agent-runs").json()
+    assert first["notes"] == "Hold AAPL while above $95."
+
+    fake_llm.turns = [final("Held.")]
+    second = client.post(f"/portfolios/{pid}/agent-runs").json()
+    memory = client.get(f"/portfolios/{pid}/agent-runs/{second['id']}").json()["input_snapshot"][
+        "memory"
+    ]
+    # Fake prices are flat: down only the slippage, while SPY is unchanged.
+    assert memory["performance"]["return_pct"] == 0.0
+    assert memory["performance"]["SPY_return_pct"] == 0.0
+    assert memory["notes_from_last_session"]["notes"] == "Hold AAPL while above $95."

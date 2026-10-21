@@ -61,6 +61,12 @@ function Run({ portfolioId, run }: { portfolioId: string; run: AgentRunSummary }
 
       {run.error && <p className="notice error">{run.error}</p>}
       {run.summary && <RichText text={run.summary} />}
+      {run.notes && (
+        <div className="run-notes">
+          <div className="muted small">Notes for its next session</div>
+          <RichText text={run.notes} />
+        </div>
+      )}
 
       {run.decisions.length > 0 && (
         <>

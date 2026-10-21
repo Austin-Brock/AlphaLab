@@ -236,3 +236,53 @@ def test_market_overview_summarizes_every_watchlist_symbol(session, market, prov
     tools.market_overview()
     # Cached symbols are reused; only SPY, which had nothing to cache, is asked for again.
     assert provider.bar_calls == calls + 1
+
+
+def test_first_run_has_no_memory(session, market, portfolio):
+    run = make_agent(session, market, FakeLLM([final("Held.")])).run(portfolio.id)
+    assert run.input_snapshot["memory"] == {}
+
+
+def test_next_run_remembers_decisions_holdings_notes_and_performance(session, market, portfolio):
+    first = FakeLLM(
+        [
+            history("AAPL", "MSFT"),
+            propose("AAPL", "BUY", 100, "AAPL up 12% this month", n=1),
+            propose("MSFT", "BUY", 1000, "Too big on purpose", n=2),
+            tool_call("save_notes", {"notes": "Sell AAPL if it drops 5%."}),
+            final("Bought AAPL."),
+        ]
+    )
+    earlier = make_agent(session, market, first).run(portfolio.id)
+    assert earlier.notes == "Sell AAPL if it drops 5%."
+    market.now.advance(days=1)
+
+    second = FakeLLM([final("Held.")])
+    run = make_agent(session, market, second).run(portfolio.id)
+
+    memory = run.input_snapshot["memory"]
+    assert memory["notes_from_last_session"]["notes"] == "Sell AAPL if it drops 5%."
+    [recent] = memory["recent_sessions"]
+    assert recent["summary"] == "Bought AAPL."
+    assert recent["trades"][0] == {
+        "symbol": "AAPL",
+        "side": "BUY",
+        "quantity": 100.0,
+        "result": "filled at 100.05",
+    }
+    assert recent["trades"][1]["result"].startswith("rejected: ")
+    [holding] = memory["holdings"]
+    assert holding["symbol"] == "AAPL"
+    assert holding["last_buy_reason"] == "AAPL up 12% this month"
+    assert holding["days_held"] >= 0
+    assert holding["gain_pct"] == -0.05  # $100 now, paid $100.05
+    # The model is shown the same memory that's stored.
+    assert "Sell AAPL if it drops 5%." in second.calls[0]["messages"][0]["content"][1]["text"]
+
+
+def test_skipped_runs_are_not_remembered(session, market, provider, portfolio):
+    provider.market_open = False
+    make_agent(session, market, FakeLLM()).run(portfolio.id)
+    provider.market_open = True
+    run = make_agent(session, market, FakeLLM([final("Held.")])).run(portfolio.id)
+    assert run.input_snapshot["memory"] == {}

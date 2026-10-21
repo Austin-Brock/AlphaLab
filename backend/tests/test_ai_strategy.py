@@ -248,3 +248,42 @@ def test_market_overview_tool_screens_without_counting_as_research(research):
     assert result.proposals == []
     error = result.transcript[4]["content"][0]["toolResult"]["content"][0]["json"]["error"]
     assert "get_price_history" in error
+
+
+def test_notes_are_saved_for_the_next_session(research):
+    llm = FakeLLM(
+        [
+            tool_call("save_notes", {"notes": "first draft"}, call_id="n1"),
+            tool_call("save_notes", {"notes": "Watching AMD for a pullback."}, call_id="n2"),
+            final("Held."),
+        ]
+    )
+    result = AITradingStrategy(llm).generate_proposals(context(research))
+    assert result.notes == "Watching AMD for a pullback."
+
+
+def test_notes_must_be_short(research):
+    llm = FakeLLM([tool_call("save_notes", {"notes": "x" * 1001}), final("Held.")])
+    result = AITradingStrategy(llm).generate_proposals(context(research))
+    assert result.notes is None
+    error = result.transcript[2]["content"][0]["toolResult"]["content"][0]["json"]["error"]
+    assert "under 1000" in error
+
+
+def test_first_session_is_told_there_is_no_memory(research):
+    llm = FakeLLM([final("Held.")])
+    AITradingStrategy(llm).generate_proposals(context(research))
+    first = llm.calls[0]["messages"][0]["content"]
+    assert "no memory yet" in first[1]["text"]
+
+
+def test_memory_is_shown_in_the_first_message(research):
+    ctx = context(research)
+    memory = {"notes_from_last_session": {"date": "2026-10-20", "notes": "Watch AMD."}}
+    llm = FakeLLM([final("Held.")])
+    AITradingStrategy(llm).generate_proposals(
+        StrategyContext(ctx.snapshot, ctx.watchlist, ctx.max_proposals, research, memory)
+    )
+    text = llm.calls[0]["messages"][0]["content"][1]["text"]
+    assert "Watch AMD." in text
+    assert "context, not a commitment" in llm.calls[0]["system"]

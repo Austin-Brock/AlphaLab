@@ -99,6 +99,7 @@ export interface AgentRunSummary {
   model_id: string | null;
   prompt_version: string | null;
   summary: string | null;
+  notes: string | null;
   error: string | null;
   input_tokens: number;
   output_tokens: number;
