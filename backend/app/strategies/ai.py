@@ -22,7 +22,7 @@ from app.strategies.base import (
 
 # Bump whenever SYSTEM_PROMPT or the tool definitions change, so every stored
 # run records exactly which instructions produced it.
-PROMPT_VERSION = "ai-trading-v1.3"
+PROMPT_VERSION = "ai-trading-v1.4"
 
 SYSTEM_PROMPT = """\
 You are the portfolio manager for AlphaLab, a simulated portfolio that trades real \
@@ -41,7 +41,8 @@ Each session:
 and use it to pick a short list worth a closer look.
 3. Research that short list with get_price_history (and get_latest_prices if useful). \
 You must call get_price_history for a symbol before you can propose a trade in it.
-4. Call propose_trade once per trade you want to make. Proposing nothing is a valid decision.
+4. Call the propose_trade tool once per trade you want to make. A trade written in your \
+reply instead of a tool call is not recorded. Proposing nothing is a valid decision.
 5. Call save_notes with a short plan for your next session: what you are watching, and \
 what would make you buy, sell or hold. Your next session sees these notes.
 6. Finish with a short plain-text summary of what you decided and why.
@@ -55,8 +56,10 @@ Rules (enforced by a separate risk engine; orders that break them are rejected, 
 - Buys fill about 0.05% above the quoted price, so size buys 1-2% below the \
 max_buy_value that get_portfolio reports.
 
-Base every decision on the data the tools return. In each proposal's rationale, cite \
-the specific numbers that drove it.
+You have no news, earnings, company financials or economic data: only what the tools \
+return. Base every decision on that data, and in each proposal's rationale cite the \
+specific numbers that drove it. Don't give reasons the tools didn't show you, such as \
+sector outlooks, commodity prices or company news.
 """
 
 MAX_NOTES_CHARS = 1000
@@ -138,6 +141,33 @@ TOOLS = [
         },
     ),
 ]
+
+
+TRADE_AS_TEXT_NUDGE = (
+    "Your last reply wrote a trade out as text, so it was not recorded. To make a trade, "
+    "call the propose_trade tool. Then call save_notes and finish with a plain-text summary."
+)
+NOTES_NUDGE = (
+    "Before you finish, call save_notes with your plan for the next session. Your summary "
+    "above is kept, so after saving reply with just: Done."
+)
+
+
+def _user(text: str) -> dict[str, Any]:
+    return {"role": "user", "content": [{"text": text}]}
+
+
+def _looks_like_trade(text: str) -> bool:
+    """True when a reply is a trade (or list of trades) written as JSON instead of a tool call."""
+    body = text.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+    try:
+        parsed = json.loads(body)
+    except ValueError:
+        return False
+    items = parsed if isinstance(parsed, list) else [parsed]
+    return bool(items) and all(
+        isinstance(i, dict) and {"symbol", "side"} <= i.keys() for i in items
+    )
 
 
 class ToolInputError(Exception):
@@ -299,6 +329,8 @@ class AITradingStrategy(TradingStrategy):
             transcript=messages,
         )
 
+        nudged: set[str] = set()
+        summary = ""
         for _ in range(self.max_turns):
             response = self.llm.converse(system, messages, TOOLS, self.max_tokens)
             result.input_tokens += response.input_tokens
@@ -313,9 +345,23 @@ class AITradingStrategy(TradingStrategy):
                 result.notes = session.notes
                 continue
             if response.stop_reason == "end_turn":
-                result.summary = "\n".join(
+                text = "\n".join(
                     b["text"] for b in response.message["content"] if "text" in b
                 ).strip()
+                # Some models occasionally write a trade out as text instead of calling
+                # the tool, or skip their notes. Point it out once each and let them go on.
+                if "trade_as_text" not in nudged and _looks_like_trade(text):
+                    nudged.add("trade_as_text")
+                    messages.append(_user(TRADE_AS_TEXT_NUDGE))
+                    continue
+                if "notes" not in nudged and session.notes is None:
+                    nudged.add("notes")
+                    summary = text
+                    messages.append(_user(NOTES_NUDGE))
+                    continue
+                # After a notes reminder the reply is just an acknowledgement; keep
+                # the summary written before it.
+                result.summary = summary or text
                 return result
             raise StrategyError(f"Model stopped unexpectedly ({response.stop_reason})", result)
 

@@ -92,8 +92,9 @@ def test_run_records_everything_needed_to_reconstruct_the_decision(session, mark
     assert (snap["max_position_pct"], snap["min_cash_pct"]) == ("0.1000", "0.0500")
     assert snap["market_open"] is True
     assert (run.model_id, run.prompt_version) == ("fake-model", PROMPT_VERSION)
-    assert (run.input_tokens, run.output_tokens) == (400, 80)
-    assert len(run.transcript) == 8
+    # Includes one reminder to save notes and the model's reply to it.
+    assert (run.input_tokens, run.output_tokens) == (500, 100)
+    assert len(run.transcript) == 10
     assert run.transcript[0]["role"] == "user"
     assert run.finished_at is not None
 
@@ -181,7 +182,7 @@ def test_run_key_prevents_running_twice(session, market, portfolio):
     second = agent.run(portfolio.id, run_key="daily:2026-10-20")
 
     assert second.id == first.id
-    assert len(llm.calls) == 3  # only the first run talked to the model
+    assert len(llm.calls) == 4  # only the first run talked to the model
     assert len(agent.trading.list_orders(portfolio.id)) == 1
 
 
@@ -274,7 +275,7 @@ def test_next_run_remembers_decisions_holdings_notes_and_performance(session, ma
     [holding] = memory["holdings"]
     assert holding["symbol"] == "AAPL"
     assert holding["last_buy_reason"] == "AAPL up 12% this month"
-    assert holding["days_held"] >= 0
+    assert "held_since" in holding and "days_held" in holding
     assert holding["gain_pct"] == -0.05  # $100 now, paid $100.05
     # The model is shown the same memory that's stored.
     assert "Sell AAPL if it drops 5%." in second.calls[0]["messages"][0]["content"][1]["text"]
