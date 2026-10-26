@@ -77,7 +77,7 @@ class Settings(BaseSettings):
     bedrock_model_id: str = "openai.gpt-oss-120b-1:0"
     agent_max_proposals: int = 5
     # Upper bound on model round-trips per run, to cap cost if the model loops.
-    agent_max_turns: int = 20
+    agent_max_turns: int = 30
     agent_max_tokens: int = 4096
     # The scheduled daily run waits until this time, US Eastern, so the opening
     # volatility has settled. Format HH:MM.

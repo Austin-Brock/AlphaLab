@@ -22,7 +22,7 @@ from app.strategies.base import (
 
 # Bump whenever SYSTEM_PROMPT or the tool definitions change, so every stored
 # run records exactly which instructions produced it.
-PROMPT_VERSION = "ai-trading-v1.4"
+PROMPT_VERSION = "ai-trading-v1.5"
 
 SYSTEM_PROMPT = """\
 You are the portfolio manager for AlphaLab, a simulated portfolio that trades real \
@@ -40,7 +40,9 @@ Each session:
 2. Call get_market_overview to see recent performance of every symbol you can trade, \
 and use it to pick a short list worth a closer look.
 3. Research that short list with get_price_history (and get_latest_prices if useful). \
-You must call get_price_history for a symbol before you can propose a trade in it.
+You must call get_price_history for a symbol before you can propose a trade in it. \
+Each session has a limited number of turns, so call several tools in one turn where you \
+can, such as get_price_history for every symbol on your short list at once.
 4. Call the propose_trade tool once per trade you want to make. A trade written in your \
 reply instead of a tool call is not recorded. Proposing nothing is a valid decision.
 5. Call save_notes with a short plan for your next session: what you are watching, and \
@@ -150,6 +152,15 @@ TRADE_AS_TEXT_NUDGE = (
 NOTES_NUDGE = (
     "Before you finish, call save_notes with your plan for the next session. Your summary "
     "above is kept, so after saving reply with just: Done."
+)
+
+
+# Turns left when the model is told to wrap up, so a long session ends with its
+# proposals and notes instead of hitting the turn limit and failing.
+WRAP_UP_TURNS = 3
+WRAP_UP_NOTE = (
+    f"Only {WRAP_UP_TURNS} turns are left in this session. Make any remaining propose_trade "
+    "calls now (several can go in one turn), then call save_notes and finish with your summary."
 )
 
 
@@ -286,7 +297,7 @@ class _Session:
 class AITradingStrategy(TradingStrategy):
     strategy_id = "ai-trading-v1"
 
-    def __init__(self, llm: LLMClient, max_turns: int = 20, max_tokens: int = 4096):
+    def __init__(self, llm: LLMClient, max_turns: int = 30, max_tokens: int = 4096):
         self.llm = llm
         self.max_turns = max_turns
         self.max_tokens = max_tokens
@@ -331,7 +342,7 @@ class AITradingStrategy(TradingStrategy):
 
         nudged: set[str] = set()
         summary = ""
-        for _ in range(self.max_turns):
+        for turn in range(self.max_turns):
             response = self.llm.converse(system, messages, TOOLS, self.max_tokens)
             result.input_tokens += response.input_tokens
             result.output_tokens += response.output_tokens
@@ -339,9 +350,10 @@ class AITradingStrategy(TradingStrategy):
 
             tool_uses = [b["toolUse"] for b in response.message["content"] if "toolUse" in b]
             if tool_uses:
-                messages.append(
-                    {"role": "user", "content": [self._run_tool(handlers, t) for t in tool_uses]}
-                )
+                content = [self._run_tool(handlers, t) for t in tool_uses]
+                if self.max_turns - turn - 1 == WRAP_UP_TURNS:
+                    content.append({"text": WRAP_UP_NOTE})
+                messages.append({"role": "user", "content": content})
                 result.notes = session.notes
                 continue
             if response.stop_reason == "end_turn":

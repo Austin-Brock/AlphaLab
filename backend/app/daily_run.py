@@ -136,21 +136,21 @@ def main(argv: Sequence[str] | None = None) -> int:
             # GitHub's run ID, so re-running the same job doesn't trade twice.
             manual_key=os.environ.get("GITHUB_RUN_ID"),
         )
-
-    if result.not_yet:
-        print(result.not_yet)
-    elif not result.runs and not result.already_ran:
-        print("No portfolios have auto-trade switched on.")
-    for skipped in result.already_ran:
-        print(f"SKIPPED {skipped}")
-    for error in result.errors:
-        print(f"ERROR {error}")
-    for run in result.runs:
-        filled = sum(1 for d in run.decisions if d.order and d.order.status.value == "FILLED")
-        print(
-            f"{run.portfolio_id} {run.status.value}: "
-            f"{len(run.decisions)} proposals, {filled} filled. {run.summary or run.error or ''}"
-        )
+        # Report inside the session: a failed run's decisions are loaded lazily.
+        if result.not_yet:
+            print(result.not_yet)
+        elif not result.runs and not result.already_ran:
+            print("No portfolios have auto-trade switched on.")
+        for skipped in result.already_ran:
+            print(f"SKIPPED {skipped}")
+        for error in result.errors:
+            print(f"ERROR {error}")
+        for run in result.runs:
+            filled = sum(1 for d in run.decisions if d.order and d.order.status.value == "FILLED")
+            print(
+                f"{run.portfolio_id} {run.status.value}: "
+                f"{len(run.decisions)} proposals, {filled} filled. {run.summary or run.error or ''}"
+            )
     return 1 if result.failed else 0
 
 
