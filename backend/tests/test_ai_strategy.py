@@ -5,7 +5,7 @@ from decimal import Decimal
 import pytest
 
 from app.models import OrderSide
-from app.strategies.ai import PROMPT_VERSION, AITradingStrategy
+from app.strategies.ai import PROMPT_VERSION, WRAP_UP_NOTE, AITradingStrategy
 from app.strategies.base import (
     HoldingSnapshot,
     PortfolioSnapshot,
@@ -189,6 +189,27 @@ def test_session_that_never_finishes_fails_with_partial_transcript(research):
         AITradingStrategy(llm, max_turns=3).generate_proposals(context(research))
     assert exc_info.value.partial.input_tokens == 300
     assert len(exc_info.value.partial.transcript) == 7
+
+
+def test_model_is_told_to_wrap_up_before_the_turn_limit(research):
+    llm = FakeLLM(
+        [
+            tool_call("get_portfolio", call_id="c0"),
+            history("AAPL"),
+            propose("AAPL", "BUY", 1),
+            tool_call("save_notes", {"notes": "Watching AAPL."}),
+            final("Bought AAPL."),
+        ]
+    )
+    result = AITradingStrategy(llm, max_turns=5).generate_proposals(context(research))
+
+    def note_sent(call):
+        return {"text": WRAP_UP_NOTE} in llm.calls[call]["messages"][-1]["content"]
+
+    # Five turns: the note goes with the results of the second, leaving three.
+    assert [note_sent(i) for i in range(1, 5)] == [False, True, False, False]
+    assert len(result.proposals) == 1
+    assert result.summary == "Bought AAPL."
 
 
 def test_truncated_reply_fails(research):
