@@ -48,7 +48,7 @@ Every order passes through the risk engine before anything moves. Orders that br
 | No short selling | Can only sell shares held |
 | Sufficient cash | Order cost ≤ available cash |
 | Cash reserve | ≥ 5% of the portfolio stays in cash |
-| Position concentration | No single stock > 10% of the portfolio |
+| Position concentration | A buy can't take a stock above 10% of the portfolio. Holdings that grow past 10% through price gains are left alone |
 
 Approved orders fill at the latest market price plus 0.05% slippage (buys pay more, sells receive less), with no commission. A submitted order can never fill twice.
 

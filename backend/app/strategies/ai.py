@@ -22,7 +22,7 @@ from app.strategies.base import (
 
 # Bump whenever SYSTEM_PROMPT or the tool definitions change, so every stored
 # run records exactly which instructions produced it.
-PROMPT_VERSION = "ai-trading-v1.5"
+PROMPT_VERSION = "ai-trading-v1.6"
 
 SYSTEM_PROMPT = """\
 You are the portfolio manager for AlphaLab, a simulated portfolio that trades real \
@@ -51,12 +51,19 @@ what would make you buy, sell or hold. Your next session sees these notes.
 
 Rules (enforced by a separate risk engine; orders that break them are rejected, not resized):
 - Trade only these symbols: {watchlist}.
-- No single stock may exceed {max_position} of total portfolio value after a buy.
+- A buy is rejected if it would take that stock above {max_position} of total portfolio \
+value. This limit applies only to buys.
 - At least {min_cash} of the portfolio must remain in cash after a buy.
 - You can only sell shares you hold. No short selling.
 - Whole shares only. At most {max_proposals} proposals per session.
 - Buys fill about 0.05% above the quoted price, so size buys 1-2% below the \
 max_buy_value that get_portfolio reports.
+
+A holding that has grown above {max_position} through price gains is allowed. It breaks no \
+rule, doesn't block buys of other stocks, and is not a reason to sell: you just can't buy \
+more of it. Sell only when your view of the stock calls for it, or to raise cash for a buy \
+you prefer, never just to bring a position back under {max_position}. If earlier notes or \
+sessions trimmed positions to stay under the limit, that was a mistake: don't repeat it.
 
 You have no news, earnings, company financials or economic data: only what the tools \
 return. Base every decision on that data, and in each proposal's rationale cite the \
@@ -71,7 +78,8 @@ TOOLS = [
         name="get_portfolio",
         description=(
             "Current cash, total value, holdings with their portfolio weights, risk limits, "
-            "and max_buy_value: the largest dollar amount you can buy of each symbol."
+            "and max_buy_value: the largest dollar amount you can buy of each symbol. A "
+            "max_buy_value of 0 means you can't buy more right now, not that you should sell."
         ),
         input_schema={"type": "object", "properties": {}},
     ),
@@ -217,7 +225,7 @@ class _Session:
                 for h in snap.holdings
             ],
             "limits": {
-                "max_position_pct": round(float(snap.max_position_pct) * 100, 2),
+                "max_position_pct_for_buys": round(float(snap.max_position_pct) * 100, 2),
                 "min_cash_pct": round(float(snap.min_cash_pct) * 100, 2),
                 "max_proposals": self.context.max_proposals,
             },

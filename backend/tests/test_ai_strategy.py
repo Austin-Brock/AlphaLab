@@ -110,7 +110,7 @@ def test_get_portfolio_reports_holdings_limits_and_buying_room(research):
     assert portfolio["cash"] == 900000.0
     assert portfolio["holdings"][0]["weight_pct"] == 10.0
     assert portfolio["limits"] == {
-        "max_position_pct": 10.0,
+        "max_position_pct_for_buys": 10.0,
         "min_cash_pct": 5.0,
         "max_proposals": 5,
     }
@@ -223,7 +223,10 @@ def test_system_prompt_states_the_rules(research):
     AITradingStrategy(llm).generate_proposals(context(research, max_proposals=3))
     system = llm.calls[0]["system"]
     assert "AAPL, MSFT, NVDA" in system
-    assert "exceed 10%" in system
+    assert "would take that stock above 10%" in system
+    assert "This limit applies only to buys" in system
+    assert "grown above 10% through price gains is allowed" in system
+    assert "never just to bring a position back under 10%" in system
     assert "At least 5%" in system
     assert "At most 3 proposals" in system
     assert "market is open" in llm.calls[0]["messages"][0]["content"][0]["text"]

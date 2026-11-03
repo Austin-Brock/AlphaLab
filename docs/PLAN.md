@@ -199,7 +199,7 @@ When multiple simulations arrive, a `simulations` table can reference portfolios
 
 ### Milestone 3 — Trading Engine
 
-**Risk policy (decided):** max 10% of the portfolio in one stock, min 5% cash, orders that break a limit are rejected (never resized), market hours enforced.
+**Risk policy (decided):** a buy can't take a stock above 10% of the portfolio (price gains past 10% are fine), min 5% cash, orders that break a limit are rejected (never resized), market hours enforced.
 
 - Submit buy/sell orders.
 - Validate available cash.
