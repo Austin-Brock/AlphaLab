@@ -1,6 +1,7 @@
 """Run the AI for every portfolio that has auto-trade switched on.
 
-Run by the GitHub Actions workflow on trading-day mornings, or by hand:
+Run by the GitHub Actions workflow on trading-day mornings (started by Vercel Cron,
+with GitHub's own schedule as a backup), or by hand:
 
     uv run python -m app.daily_run                    # scheduled mode
     uv run python -m app.daily_run --manual           # now, regardless of the time

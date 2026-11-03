@@ -11,6 +11,10 @@
       "framework": "vite"
     }
   },
+  "crons": [
+    { "path": "/api/cron/daily-run", "schedule": "5 14 * * 1-5" },
+    { "path": "/api/cron/daily-run", "schedule": "5 15 * * 1-5" }
+  ],
   "rewrites": [
     { "source": "/api/(.*)", "destination": { "service": "backend" } },
     { "source": "/(.*)", "destination": { "service": "frontend" } }

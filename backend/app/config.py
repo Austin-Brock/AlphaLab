@@ -82,6 +82,18 @@ class Settings(BaseSettings):
     # The scheduled daily run waits until this time, US Eastern, so the opening
     # volatility has settled. Format HH:MM.
     daily_run_after: str = "10:00"
+    # Vercel Cron sends this secret when it calls /cron/daily-run. Vercel requires this
+    # exact name. Unset means the endpoint refuses every request.
+    cron_secret: SecretStr | None = Field(default=None, validation_alias="CRON_SECRET")
+    # Fine-grained GitHub token limited to this repo with Actions read and write, used
+    # to start the daily run workflow.
+    github_dispatch_token: SecretStr | None = None
+    github_repo: str = "Austin-Brock/AlphaLab"
+
+    @field_validator("cron_secret", "github_dispatch_token", mode="before")
+    @classmethod
+    def blank_secret_means_unset(cls, value: str | None) -> str | None:
+        return value or None
 
     @field_validator("admin_key")
     @classmethod

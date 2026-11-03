@@ -2,6 +2,8 @@ name: Daily AI run
 
 on:
   schedule:
+    # Backup only: GitHub's scheduler has been hours late, so Vercel Cron normally starts
+    # this job on time (see crons in vercel.json and backend/app/api/cron.py).
     # 10:05 ET on weekdays. GitHub cron is UTC and ignores daylight saving, so fire at
     # both 14:05 (EDT) and 15:05 (EST); the script waits for 10:00 ET and runs each
     # portfolio at most once a day. Market holidays are skipped by the market-hours check.
@@ -17,6 +19,10 @@ on:
         description: "Only check connections (database, market data, AWS); trade nothing"
         type: boolean
         default: true
+      scheduled:
+        description: "Run as the scheduled daily run: after 10:00 ET and at most once a day"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -59,10 +65,11 @@ jobs:
         env:
           PORTFOLIO: ${{ inputs.portfolio }}
           CHECK_ONLY: ${{ inputs.check_only }}
+          SCHEDULED: ${{ inputs.scheduled }}
         run: |
           if [ "$CHECK_ONLY" = "true" ]; then
             uv run python -m app.daily_run --check
-          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "$SCHEDULED" != "true" ]; then
             uv run python -m app.daily_run --manual ${PORTFOLIO:+--portfolio "$PORTFOLIO"}
           else
             uv run python -m app.daily_run

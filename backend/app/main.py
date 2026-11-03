@@ -2,7 +2,7 @@ from fastapi import Depends, FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
 from app.agent.service import UnknownStrategyError
-from app.api import admin, agent, market, orders, portfolios
+from app.api import admin, agent, cron, market, orders, portfolios
 from app.api.auth import require_admin_for_writes
 from app.llm.client import LLMUnavailableError
 from app.market_data.provider import MarketDataUnavailableError
@@ -29,6 +29,7 @@ app.include_router(orders.router)
 app.include_router(agent.router)
 app.include_router(market.router)
 app.include_router(admin.router)
+app.include_router(cron.router)
 
 
 @app.exception_handler(PortfolioNotFoundError)
